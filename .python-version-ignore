@@ -1,0 +1,16 @@
+# Globs are fnmatch, not gitignore syntax: `*` crosses `/`.
+#
+# The tests use version literals (py39, 3.11.9, "Python 3.13+") as fixture data.
+# Without this entry, every minor bump fails on the test suite's own fixtures.
+#
+# README.md is deliberately NOT listed. It documents rules using the current
+# version, so the hook keeps its own documentation honest on the next bump --
+# which is the whole argument for the prose rules.
+tests/*
+
+# Toolchain definitions are regexes and form templates. They cite token shapes
+# (`python3.9`, `py39`) as illustrations of what a rule matches, and never carry
+# a version this repo runs on -- so there is nothing in them that *could* drift.
+# Scoped to this directory rather than all of src/, where a hardcoded version
+# would be a genuine bug.
+src/version_drift/toolchains/*

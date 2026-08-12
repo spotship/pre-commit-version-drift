@@ -1,0 +1,25 @@
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-toml
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.6
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # This repo's own hook cannot be listed by URL here -- pre-commit would clone
+  # a published rev rather than the working tree, so the check would lag the
+  # code it is meant to gate. CI runs `pre-commit try-repo .` instead, which
+  # builds the hook from HEAD.

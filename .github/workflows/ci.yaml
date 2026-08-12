@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # python-version-ok: the supported range, not a pin. This package runs on
+        # every version in it; .python-version says which one it is developed on.
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+
+  hook:
+    # Drives the real pre-commit hook against this repo, which is the only way
+    # to catch a broken `entry:` -- the unit tests import the package directly
+    # and would pass with the console script misnamed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install pre-commit
+      - run: pre-commit run --all-files --show-diff-on-failure
+      - run: pre-commit try-repo . version-drift --all-files
+
+      - name: the fix hook rewrites drift it is pointed at
+        run: |
+          set -euo pipefail
+          hook_repo="$PWD"
+          declared="$(tr -d '[:space:]' < "$hook_repo/.python-version")"
+          drifted="3.11.9"
+          if [ "$drifted" = "$declared" ]; then
+            echo "::error file=.github/workflows/ci.yaml::the drift fixture must differ from .python-version ($declared)"
+            exit 1
+          fi
+
+          consumer="$(mktemp -d)"
+          cd "$consumer"
+          git init -q -b main
+          cp "$hook_repo/.python-version" .python-version
+          printf 'FROM python:%s-slim\n' "$drifted" > Dockerfile
+          cat > .pre-commit-config.yaml <<YAML
+          repos:
+            - repo: $hook_repo
+              rev: HEAD
+              hooks:
+                - id: version-drift
+                - id: version-drift-fix
+          YAML
+          git add -A
+
+          if pre-commit run version-drift --all-files; then
+            echo "::error::the check hook passed on a repo that has drift"
+            exit 1
+          fi
+
+          pre-commit run --hook-stage manual version-drift-fix --all-files || true
+          if ! grep -qF "FROM python:$declared-slim" Dockerfile; then
+            echo "::error::--fix did not rewrite the pin to $declared"
+            exit 1
+          fi
+          git add -A
+          pre-commit run version-drift --all-files

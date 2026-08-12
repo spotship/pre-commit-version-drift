@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pre-commit-version-drift"
+version = "0.1.0"
+description = "Fail if any pinned toolchain version disagrees with its source-of-truth file"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Jimbo Freedman" }]
+keywords = ["pre-commit", "versions", "drift", "linter"]
+# tomllib, so 3.11 is a hard floor. This is the oldest version the package
+# supports, which is a different fact from the one it is developed on -- see
+# .python-version.
+requires-python = ">=3.11"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/jimbofreedman/pre-commit-version-drift"
+
+[project.scripts]
+version-drift = "version_drift.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+version_drift = ["toolchains/*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixture data is file content: a table row that wraps is harder to read than
+# one that runs long, and the wrapped form hides what is being fed to the rule.
+"tests/*" = ["E501"]

@@ -1,0 +1,36 @@
+# Adopt with:
+#
+#   - repo: https://github.com/jimbofreedman/pre-commit-version-drift
+#     rev: v0.1.0
+#     hooks:
+#       - id: version-drift
+#
+# `always_run` + `pass_filenames: false` on purpose. The whole repo is swept on
+# every commit, because the file that most often changes -- the source-of-truth
+# version file -- invalidates pins in files that did not change at all.
+- id: version-drift
+  name: version drift
+  description: Fail if any pinned toolchain version disagrees with its source-of-truth file
+  entry: version-drift
+  language: python
+  always_run: true
+  pass_filenames: false
+
+# Opt-in autofix, kept off normal commits by `stages: [manual]` because it
+# rewrites files.
+#
+# `--fix` is baked into `entry` rather than declared as `args: ["--fix"]`. The
+# args form reads as more idiomatic, but a consumer's `args:` *replaces* a
+# hook's `args:` instead of appending to it -- so any consumer setting its own
+# `args:` would silently disarm the flag, leaving a hook named "(--fix)" that
+# reports drift and rewrites nothing.
+#
+#   pre-commit run --hook-stage manual version-drift-fix --all-files
+- id: version-drift-fix
+  name: version drift (--fix)
+  description: Rewrite drifted version pins to match the source-of-truth file
+  entry: version-drift --fix
+  language: python
+  always_run: true
+  pass_filenames: false
+  stages: [manual]

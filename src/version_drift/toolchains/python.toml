@@ -1,0 +1,201 @@
+# Python toolchain: .python-version is the single source of truth.
+#
+# Rule order matters. When two rules claim the same characters, the first one
+# wins the report -- `build-python3.12` is a SAM image, not a bare interpreter
+# name, so sam-build-image is listed above interpreter-or-runtime.
+
+name = "python"
+source_file = ".python-version"
+inline_escape = "python-version-ok"
+ignore_file = ".python-version-ignore"
+# X.Y.Z required: docker.io/python publishes patch tags, so a repo pinning only
+# "3.12" could not say which image it means.
+components = 3
+
+[forms]
+patch = "{major}.{minor}.{patch}"
+minor = "{major}.{minor}"
+nodot = "{major}{minor}"
+
+[globs]
+dockerfile = ["*Dockerfile", "*Dockerfile.*", "*.dockerfile"]
+yaml = ["*.yml", "*.yaml"]
+docs = ["*.md"]
+conda = ["environment.yml", "environment.yaml", "conda*.yml", "conda*.yaml"]
+config = [
+  "*Dockerfile", "*Dockerfile.*", "*.dockerfile",
+  "*.yml", "*.yaml", "*.toml", "*.cfg", "*.ini", "*.tf", "*.hcl", "*.sh",
+  "Pipfile", ".tool-versions",
+]
+
+# --- container images ------------------------------------------------------
+# Swept over YAML as well as Dockerfiles: compose services and a workflow's
+# `container: image:` pin base images too. The digit must follow the colon
+# immediately, which is what keeps these off `python: "3.12"` in YAML (that is
+# readthedocs, below) without needing to know which file is which.
+
+[[rules]]
+name = "docker-image-patch"
+pattern = '(?:^|[/\s])python:(\d+\.\d+\.\d+)'
+form = "patch"
+globs = ["@dockerfile", "@yaml"]
+
+[[rules]]
+# Registries that publish only minor tags: public.ecr.aws/lambda/python, and
+# the `python:3.12-slim` family.
+name = "docker-image-minor"
+pattern = '(?:^|[/\s])python:(\d+\.\d+)(?![\d.])'
+form = "minor"
+globs = ["@dockerfile", "@yaml"]
+
+[[rules]]
+# The indirection form: ARG PYTHON_VERSION=3.12.13, used later as ${PYTHON_VERSION}.
+# The ARG itself is checkable even though the FROM that consumes it is not.
+name = "dockerfile-arg"
+pattern = '''ARG\s+[A-Z_]*PYTHON[A-Z_]*\s*=\s*["']?(\d+\.\d+(?:\.\d+)?)'''
+form = "patch"
+also_accepts = ["minor"]
+globs = ["@dockerfile"]
+
+[[rules]]
+name = "sam-build-image"
+pattern = 'build-python(\d+\.\d+)'
+form = "minor"
+globs = ["@config"]
+
+# --- interpreters and runtimes ---------------------------------------------
+
+[[rules]]
+# One shape covers a surprising amount: `python3.12 -m pip`, Serverless
+# `runtime: python3.12`, SAM `Runtime: python3.12`, and pre-commit's
+# `default_language_version: {python: python3.12}`.
+#
+# Swept over docs too -- a README telling somebody to run `python3.9 -m venv`
+# after the repo moved to 3.12 is a command that breaks when followed.
+name = "interpreter-or-runtime"
+pattern = '\bpython(\d+\.\d+)\b'
+form = "minor"
+globs = ["@config", "@docs"]
+
+[[rules]]
+# actions/setup-python. Prefer `python-version-file: .python-version`, which is
+# never flagged because it cannot drift; a literal is accepted if it agrees.
+name = "setup-python"
+pattern = '''python-version:\s*['"]?(\d+\.\d+(?:\.\d+)?)'''
+form = "patch"
+also_accepts = ["minor"]
+globs = ["@yaml"]
+
+[[rules]]
+name = "readthedocs-python"
+pattern = '''^\s*python:\s*['"](\d+\.\d+(?:\.\d+)?)['"]'''
+form = "minor"
+also_accepts = ["patch"]
+globs = ["@yaml"]
+
+# --- declared versions in packaging metadata --------------------------------
+
+[[rules]]
+# A floor, not a pin: ">=3.9" on a repo running 3.12.13 is correct -- it says the
+# package still supports 3.9. Only a floor above the pin is wrong.
+#
+# uv.lock restates the workspace floor, so a stale one there means somebody
+# edited pyproject.toml without re-locking.
+name = "requires-python"
+pattern = '''requires-python\s*=\s*['"][^'"]*?(\d+\.\d+)'''
+form = "minor"
+floor = true
+globs = ["*.toml", "uv.lock"]
+
+[[rules]]
+# mypy's python_version, and Pipfile's [requires] python_version /
+# python_full_version. Quotes are optional on purpose: [tool.mypy] in TOML
+# requires them, and mypy's ini parser rejects them ("Invalid python version
+# '\"3.11\"'"), so bare is the only form it honours in mypy.ini / setup.cfg.
+# Demanding quotes made this rule dead in exactly the files it exists for.
+name = "python-version-key"
+pattern = '''^\s*python(?:_full_version|_version)\s*=\s*['"]?(\d+\.\d+(?:\.\d+)?)'''
+form = "minor"
+also_accepts = ["patch"]
+globs = ["*.toml", "*.cfg", "*.ini", "Pipfile"]
+
+# --- version-manager and platform files -------------------------------------
+
+[[rules]]
+name = "tool-versions"
+pattern = '^python\s+(\d+\.\d+\.\d+)'
+form = "patch"
+globs = [".tool-versions"]
+
+[[rules]]
+# Heroku / Scalingo style: `python-3.12.13`
+name = "runtime-txt"
+pattern = '^python-(\d+\.\d+\.\d+)'
+form = "patch"
+globs = ["runtime.txt"]
+
+[[rules]]
+# conda: `- python=3.12`. Restricted to environment files -- the `key = value`
+# shape is far too common to sweep across all YAML.
+name = "conda-python"
+pattern = '\bpython\s*=\s*(\d+\.\d+(?:\.\d+)?)'
+form = "minor"
+also_accepts = ["patch"]
+globs = ["@conda"]
+
+# --- nodot tokens ------------------------------------------------------------
+# Deliberately NOT swept over docs. A bare `py39` in prose is nearly always a
+# token being described rather than a pin being declared -- any document
+# explaining these rules is the first casualty -- while the same token in a
+# config file is always a real setting.
+
+[[rules]]
+# ruff target-version, tox envlist, SageMaker py_version, pytorch image tags.
+# Two digits as well as three: a stale `py39` is exactly the drift this catches.
+# \b keeps `kepy301` invisible, and a four-digit run matches nothing.
+name = "py-nodot"
+pattern = '\bpy(\d{2,3})\b'
+form = "nodot"
+globs = ["@config", "*.py"]
+
+[[rules]]
+# GCP Cloud Functions / Cloud Run runtimes: python312
+name = "python-nodot"
+pattern = '\bpython(\d{2,3})\b'
+form = "nodot"
+globs = ["@config", "*.py"]
+
+# --- documentation prose -----------------------------------------------------
+# A stale "Python 3.12" in CLAUDE.md survives every rule above, and it is the
+# copy a coding agent treats as ground truth -- so it misinforms exactly the
+# reader least able to check it against a Dockerfile.
+
+[[rules]]
+# Capital P on purpose: that is how documentation names the language, while
+# lowercase is a CLI flag whose argument is not ours to rewrite
+# (`uv venv --python 3.11`). `CPython 3.11` is excluded for free -- \b does not
+# fire between C and P.
+#
+# The trailing lookahead does two jobs. `[\d+]` keeps this rule disjoint from
+# the floor rule below: without it, "Python 3.12+" backtracks into a match of
+# "3.1" -- the optional patch group is skipped, `\d+\.\d+` settles for the
+# shorter run, and the lookahead is satisfied by the "2" it left behind. `\.\d`
+# then rejects only a dot that *continues* the version, so a sentence ending
+# "...runs on Python 3.12." still matches; a bare `\.` would silently drop every
+# version written at the end of a sentence.
+name = "prose-version"
+pattern = '\bPython\s+(\d+\.\d+(?:\.\d+)?)(?![\d+]|\.\d)'
+form = "minor"
+also_accepts = ["patch"]
+globs = ["@docs"]
+
+[[rules]]
+# "Python 3.12+" is a floor, same as requires-python: it says the repo needs at
+# least 3.12, which running 3.13 does not contradict. Only the minor is
+# captured, so "Python 3.12.13+" still orders against the minor form rather than
+# comparing (3, 12, 13) against (3, 12) and reporting the pin itself.
+name = "prose-version-floor"
+pattern = '\bPython\s+(\d+\.\d+)(?:\.\d+)?\+'
+form = "minor"
+floor = true
+globs = ["@docs"]
