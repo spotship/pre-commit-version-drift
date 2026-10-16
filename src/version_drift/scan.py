@@ -92,6 +92,9 @@ def read_declared(root: Path, toolchain: Toolchain) -> str | None:
         text = source.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
+    if toolchain.source_search:
+        match = toolchain.source_search.search(text)
+        return match.group(1) if match else None
     if not toolchain.source_field:
         return text.strip()
     try:
@@ -232,8 +235,9 @@ def can_check(rule: Rule, toolchain: Toolchain, forms: dict[str, str]) -> bool:
 def can_fix(rule: Rule, forms: dict[str, str]) -> bool:
     """`--fix` writes `rule.form` into the file, so a prefix will not do: that
     would rewrite `python:3.9.1` to `python:3.12`, deleting a component the tag
-    needs rather than correcting it."""
-    return not rule.floor and rule.form in forms
+    needs rather than correcting it. A rule may also opt out outright, where the
+    source of truth is the side more likely to be the stale one."""
+    return rule.fixable and not rule.floor and rule.form in forms
 
 
 def expected_text(rule: Rule, toolchain: Toolchain, forms: dict[str, str]) -> str:

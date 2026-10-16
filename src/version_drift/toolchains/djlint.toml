@@ -1,0 +1,39 @@
+# djLint: the rev of the djLint hook is the single source of truth.
+#
+# Same shape as ruff, and the same failure: djLint is a *formatter* as well as a
+# linter (`djlint-reformat-django`), so two versions of it rewrite templates
+# differently. A commit formatted by the hook's djLint and then touched by the
+# dependency's djLint produces a diff nobody asked for, in files neither change
+# was about.
+#
+# Found drifted in backend on the first run: requirements/local.txt pinned
+# djlint==1.36.4 against a hook rev of v1.35.4.
+
+name = "djlint"
+source_file = ".pre-commit-config.yaml"
+# The repo name's capitalisation is djLint's own; matched as written rather than
+# case-insensitively, so this does not also claim a differently-named fork.
+source_search = '''Riverside-Healthcare/djLint\s*\n\s*rev:\s*['"]?v?(\d+\.\d+(?:\.\d+)?)'''
+inline_escape = "djlint-version-ok"
+ignore_file = ".djlint-version-ignore"
+components = 3
+
+skip_globs = ["uv.lock", "poetry.lock", "*.lock", "requirements*.lock"]
+
+[forms]
+patch = "{major}.{minor}.{patch}"
+
+[[rules]]
+# `djlint==1.36.4`. Lowercase, which is how the distribution is named on PyPI
+# regardless of how the project writes it in prose.
+name = "djlint-pin"
+pattern = '''\bdjlint\s*[=><~!]=?\s*['"]?(\d+\.\d+(?:\.\d+)?)'''
+form = "patch"
+# Never rewritten. The source here is the rev, chosen because its path is stable
+# across repos rather than because it is the authoritative side -- and it is the
+# side `pre-commit autoupdate` and Renovate move, so a disagreement is usually
+# the rev lagging. Rewriting the dependency to match would downgrade the linter:
+# backend's first run reported 0.15.10 against a rev of 0.8.6, where --fix would
+# have taken the dependency back seven minor versions. Bump the rev instead.
+fixable = false
+globs = ["*.txt", "*.toml", "*.cfg", "*.ini"]

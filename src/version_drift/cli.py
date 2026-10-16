@@ -105,15 +105,17 @@ def main(argv: list[str] | None = None) -> int:
             # means "not this toolchain", never "nothing to check" -- that
             # verdict is made below, once every toolchain has had its say.
             if has_pins(root, toolchain):
-                # "package.json has no packageManager" is only true when the file
-                # is there. Said of a repo that has no package.json at all, it
-                # sends the reader looking for a field in a file that does not
-                # exist.
-                missing = (
-                    f"has no {toolchain.source_field}"
-                    if toolchain.source_field and (root / toolchain.source_file).is_file()
-                    else "absent"
-                )
+                # Three different absences, and saying the wrong one sends the
+                # reader to the wrong place: "package.json has no packageManager"
+                # is a lie about a repo with no package.json, and
+                # ".pre-commit-config.yaml absent" is a lie about a config that
+                # is there but lists no ruff hook.
+                if not (root / toolchain.source_file).is_file():
+                    missing = "absent"
+                elif toolchain.source_field:
+                    missing = f"has no {toolchain.source_field}"
+                else:
+                    missing = f"names no {name} version"
                 absent.append(f"{name} ({toolchain.source_file} {missing})")
             continue
         declared = found
@@ -124,10 +126,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     if not results:
+        # De-duplicated: ruff and djLint both read .pre-commit-config.yaml, and
+        # naming it twice reads as a typo rather than as two toolchains.
         expected = ", ".join(
             sorted(
-                f"{t.source_file} ({t.source_field})" if t.source_field else t.source_file
-                for t in selected.values()
+                {
+                    f"{t.source_file} ({t.source_field})" if t.source_field else t.source_file
+                    for t in selected.values()
+                }
             )
         )
         print(

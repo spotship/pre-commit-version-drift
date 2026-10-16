@@ -30,7 +30,11 @@ Issues = "https://github.com/spotship/pre-commit-version-drift/issues"
 version-drift = "version_drift.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.8"]
+# ruff is pinned, not floating, and must equal the ruff-pre-commit rev in
+# .pre-commit-config.yaml -- the invariant the ruff toolchain enforces. A
+# range here resolves to whatever is newest at install time and silently
+# lints differently from the hook.
+dev = ["pytest>=8", "ruff==0.15.6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

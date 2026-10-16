@@ -1,0 +1,60 @@
+# ruff: the rev of the ruff-pre-commit hook is the single source of truth.
+#
+# Named ruff-linter.toml, not ruff.toml: that filename is ruff's OWN config
+# name, so ruff picks it up as configuration for everything in this directory
+# and fails with `unknown field \`components\``. The toolchain is still called
+# "ruff" -- the name comes from the `name` key, not the filename.
+#
+# The invariant was written by hand in ais/apps/processor/pyproject.toml before
+# anything enforced it:
+#
+#   # Pinned, not floating: this must equal the ruff-pre-commit rev in
+#   # .pre-commit-config.yaml, which is what CI runs. A floating range
+#   # here resolves to whatever is newest at lock time and silently
+#   # drifts away from the hook.
+#
+# Two ruffs lint the same code -- the hook's, and the one in the dev
+# dependencies that `task lint` and any editor integration pick up. When they
+# differ, the same file passes one and fails the other, and a formatter
+# disagreement rewrites the whole file back and forth between a commit and a CI
+# run.
+#
+# The *rev* is the source rather than the dependency pin because
+# .pre-commit-config.yaml sits at the repo root everywhere, while the pin's home
+# varies: requirements/local.txt in backend, apps/processor/pyproject.toml in
+# ais, pyproject.toml here. Globs find the pin wherever it lives; a fixed
+# source_file could not.
+
+name = "ruff"
+source_file = ".pre-commit-config.yaml"
+# Spans lines, which is the point: the rev is on the line after its repo, and a
+# per-line pattern cannot tell it from every other rev in the file.
+source_search = '''astral-sh/ruff-pre-commit\s*\n\s*rev:\s*['"]?v?(\d+\.\d+(?:\.\d+)?)'''
+inline_escape = "ruff-version-ok"
+ignore_file = ".ruff-version-ignore"
+components = 3
+
+skip_globs = ["uv.lock", "poetry.lock", "*.lock", "requirements*.lock"]
+
+[forms]
+patch = "{major}.{minor}.{patch}"
+
+[[rules]]
+# `ruff==0.15.10` in a requirements file, `"ruff==0.15.12"` in a dependency
+# group. Any comparator is matched, not just `==`, because a range is the defect
+# rather than an exemption from it: `ruff>=0.15.6` still resolves to whatever is
+# newest at lock time, which is the drift ais's comment describes. Reporting the
+# range's floor against the pin is how that surfaces.
+#
+# `[tool.ruff]` and a docs URL carry no comparator, so neither is matched.
+name = "ruff-pin"
+pattern = '''\bruff\s*[=><~!]=?\s*['"]?(\d+\.\d+(?:\.\d+)?)'''
+form = "patch"
+# Never rewritten. The source here is the rev, chosen because its path is stable
+# across repos rather than because it is the authoritative side -- and it is the
+# side `pre-commit autoupdate` and Renovate move, so a disagreement is usually
+# the rev lagging. Rewriting the dependency to match would downgrade the linter:
+# backend's first run reported 0.15.10 against a rev of 0.8.6, where --fix would
+# have taken the dependency back seven minor versions. Bump the rev instead.
+fixable = false
+globs = ["*.txt", "*.toml", "*.cfg", "*.ini"]

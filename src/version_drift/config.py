@@ -61,6 +61,20 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
                 f"(the dotted version); it captures {source_pattern.groups}"
             )
 
+    raw_search = data.get("source_search")
+    if raw_search is None:
+        source_search = None
+    else:
+        try:
+            source_search = re.compile(raw_search)
+        except re.error as exc:
+            raise ConfigError(f"toolchain {name!r} has an invalid source_search: {exc}") from exc
+        if source_search.groups != 1:
+            raise ConfigError(
+                f"toolchain {name!r} source_search must capture exactly one group "
+                f"(the version); it captures {source_search.groups}"
+            )
+
     groups = {key: list(value) for key, value in data.get("globs", {}).items()}
     rules: list[Rule] = []
     for raw in data.get("rules", []):
@@ -78,6 +92,7 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
                 form=raw.get("form", ""),
                 globs=_expand_globs(raw.get("globs", []), groups, rule_name),
                 field=raw.get("field", ""),
+                fixable=bool(raw.get("fixable", True)),
                 also_accepts=tuple(raw.get("also_accepts", ())),
                 floor=bool(raw.get("floor", False)),
             )
@@ -94,6 +109,7 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
             ignore_file=data.get("ignore_file", f".{name}-version-ignore"),
             source_pattern=source_pattern,
             source_field=data.get("source_field", ""),
+            source_search=source_search,
             skip_globs=tuple(data.get("skip_globs", ())),
         )
     )

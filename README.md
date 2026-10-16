@@ -251,6 +251,37 @@ Two consequences worth knowing:
 - **There is no inline escape**, because JSON has no comments. A field that
   genuinely cannot track the repo version needs its file in the ignore file.
 
+## ruff and djLint
+
+Two linters get a toolchain of their own, because each is pinned **twice** — once
+as a `rev:` in `.pre-commit-config.yaml` and once in the dev dependencies — and
+both copies run. When they differ, the same file passes one and fails the other,
+and because both tools also *format*, a disagreement rewrites files back and
+forth between a commit and a CI run.
+
+| Toolchain | Source of truth | Checks |
+|---|---|---|
+| ruff | `rev:` of `astral-sh/ruff-pre-commit` | `ruff==X.Y.Z` in `*.txt`, `*.toml`, `*.cfg`, `*.ini` |
+| djlint | `rev:` of `Riverside-Healthcare/djLint` | `djlint==X.Y.Z`, same files |
+
+The **rev** is the source because `.pre-commit-config.yaml` sits at the repo root
+everywhere, while the dependency pin's home varies — `requirements/local.txt` in
+one repo, a nested `pyproject.toml` in another. Globs find the pin wherever it
+lives; a fixed path could not.
+
+That choice is about path stability, not authority, and the rev is the side
+`pre-commit autoupdate` and Renovate move — so a disagreement is usually the rev
+lagging, and the remedy is normally to bump it rather than to downgrade the
+dependency. **`--fix` never rewrites these**, for exactly that reason.
+
+A floating range is reported rather than excused. `ruff>=0.15.6` still resolves
+to whatever is newest at install time, which is the drift itself and not an
+exemption from it.
+
+A repo whose `.pre-commit-config.yaml` lists no ruff hook has no ruff version to
+check anything against, so the toolchain is skipped — the same as a Python repo
+having no `.nvmrc`.
+
 ## Other toolchains
 
 The engine is not language-specific; every built-in toolchain is a TOML file it

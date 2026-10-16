@@ -96,6 +96,12 @@ class Rule:
     # Some pins are legitimate at more than one precision -- a workflow may name
     # either "3.12" or "3.12.13" and both are correct.
     also_accepts: tuple[str, ...] = ()
+    # Whether --fix may rewrite this pin. False where the source of truth is the
+    # side more likely to be stale: ruff's and djLint's revs are maintained by
+    # `pre-commit autoupdate` and Renovate, so a disagreement is usually the rev
+    # lagging the dependency, and rewriting the dependency to match would
+    # downgrade the linter rather than fix anything.
+    fixable: bool = True
     # A floor declares the *oldest* version supported, not the one this repo runs
     # on, so anything at or below the pin is correct. Only a floor above the pin
     # is wrong: it excludes the interpreter in use. Floors are never rewritten --
@@ -127,6 +133,20 @@ class Toolchain:
     # from that field's value, the same two steps that read `pypy3.10-7.3.12`
     # out of a .python-version.
     source_field: str = ""
+    # A regex locating the version *within* source_file, matched against the
+    # whole text rather than per line -- so it can span lines, which is what
+    # reading a value out of YAML without a YAML parser requires. ruff's truth is
+    # the `rev:` on the line after `repo: .../ruff-pre-commit`, and a per-line
+    # pattern cannot tell that rev from any other rev in the same file.
+    #
+    # It *locates*; source_pattern still parses what it finds. Keeping the two
+    # separate is what lets the located value be a bare version here and
+    # `pnpm@9.15.9` there.
+    #
+    # No match means "not this toolchain", not an error: a repo with no ruff hook
+    # has no ruff version to check anything against, which is the same situation
+    # as a Python repo having no .nvmrc.
+    source_search: re.Pattern[str] | None = None
     # Files never swept, whatever the rules' globs say. Node's rules cover
     # *.yml, which includes pnpm-lock.yaml, where third-party package names
     # ("parse-node-version: 1.0.1") read as pins. It cannot be a global: the
