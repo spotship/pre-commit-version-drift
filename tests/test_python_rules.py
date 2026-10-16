@@ -442,3 +442,49 @@ def test_a_minor_only_file_still_catches_a_patch_pin_wrong_at_the_minor(make_rep
     result = run_cli(repo)
     assert result.code == 1
     assert "[docker-image-patch] found '3.9.1', expected 3.12" in result.err
+
+
+# --------------------------------------------------------------------------
+# Multi-version workflow values
+#
+# This org runs one Python version at a time, so a list exists in order to test
+# two and every entry has to be the pin.
+# --------------------------------------------------------------------------
+
+
+def test_each_entry_of_a_version_list_is_checked(make_repo, run_cli):
+    repo = make_repo({".github/workflows/ci.yaml": "        python-version: ['3.11', '3.12']\n"})
+    result = run_cli(repo)
+    assert result.code == 1
+    assert "[setup-python-list] found '3.11'" in result.err
+    # Only the bad one. The 3.12 beside it is the pin.
+    assert len([line for line in result.err.splitlines() if "setup-python-list" in line]) == 1
+
+
+def test_a_single_entry_list_is_not_drift(make_repo, run_cli):
+    repo = make_repo({".github/workflows/ci.yaml": "        python-version: ['3.12']\n"})
+    assert run_cli(repo).code == 0
+
+
+def test_a_node_version_list_is_not_read_as_python(make_repo, run_cli):
+    """Why the rule names the major. The entry is anchored, not the key, so
+    without `3.` this would claim every Node version in the same workflow."""
+    repo = make_repo({".github/workflows/ci.yaml": "        node-version: ['20.1.0', '22.0.0']\n"})
+    assert run_cli(repo).code == 0
+
+
+def test_a_scalar_is_not_reported_twice(make_repo, run_cli):
+    """setup-python owns the scalar form. The list rule's trailing `,`/`]` is
+    what keeps the two disjoint."""
+    repo = make_repo({".github/workflows/ci.yaml": "        python-version: '3.9'\n"})
+    result = run_cli(repo)
+    assert result.code == 1
+    assert "[setup-python] found '3.9'" in result.err
+    assert "setup-python-list" not in result.err
+
+
+def test_a_matrix_expression_is_not_a_pin(make_repo, run_cli):
+    repo = make_repo(
+        {".github/workflows/ci.yaml": "        python-version: ${{ matrix.python-version }}\n"}
+    )
+    assert run_cli(repo).code == 0

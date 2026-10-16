@@ -306,11 +306,9 @@ because a hook that cries wolf gets `--no-verify`'d. It does **not** catch:
 - JSON, except the `package.json` fields named above. Those are addressed by
   path; nothing scans JSON generally, so `.devcontainer/devcontainer.json` and a
   notebook's `kernelspec` are not read.
-- Workflow values not written on the key's own line. `setup-python` accepts
-  several versions, as a list (`python-version: ['3.11', '3.12']`) or a block
-  (`python-version: |` with one per line); the patterns need a quote or a digit
-  straight after the colon, so both are invisible and a stale entry in a test
-  matrix goes unread.
+- The block form of a multi-version value. `python-version: ['3.11', '3.12']` is
+  read, entry by entry, but `python-version: |` with one version per line is not:
+  the rules match within a line, and nothing here parses YAML.
 - Space-separated lowercase forms: `uv python install 3.11`.
 - Full indirection: `FROM python:${PY}-slim` where `PY` came from outside the
   Dockerfile. The `ARG` form is caught; a build-arg default supplied by CI is not.

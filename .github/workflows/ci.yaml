@@ -11,9 +11,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # python-version-ok: the supported range, not a pin. This package runs on
-        # every version in it; .python-version says which one it is developed on.
-        python-version: ['3.11', '3.12', '3.13']
+        # The supported range, not a pin: this package runs on every version in
+        # it, while .python-version says which one it is developed on. The escape
+        # has to sit on the line itself -- it is matched per line, so this
+        # explanation above it suppresses nothing on its own.
+        python-version: ['3.11', '3.12', '3.13']  # python-version-ok: supported range
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

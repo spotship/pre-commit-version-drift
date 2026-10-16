@@ -108,6 +108,26 @@ also_accepts = ["minor"]
 globs = ["@yaml"]
 
 [[rules]]
+# A setup-python list: `python-version: ['3.11', '3.12']`, and the matrix that
+# usually feeds one. This org runs a single Python version at a time, so every
+# entry has to be the pin -- a list exists in order to test two, which is the
+# thing to report rather than an exception to it.
+#
+# Anchored on the entry rather than the `python-version:` key, because Python's
+# `re` has no variable-length lookbehind and one pattern captures one group: to
+# report *each* bad entry, a match has to start at the entry. The trailing
+# `,`/`]` is what confines it to a flow sequence -- a scalar
+# `python-version: '3.11'` has neither, so setup-python keeps that one and this
+# never double-reports it. The literal `3.` keeps it off a `node-version` list
+# in the same workflow; it is the one place a rule names the language's major,
+# and it has to be revisited if there is ever a Python 4.
+name = "setup-python-list"
+pattern = '''['"](3\.\d+(?:\.\d+)?)['"](?=\s*[,\]])'''
+form = "patch"
+also_accepts = ["minor"]
+globs = ["@yaml"]
+
+[[rules]]
 name = "readthedocs-python"
 pattern = '''^\s*python:\s*['"](\d+\.\d+(?:\.\d+)?)['"]'''
 form = "minor"
