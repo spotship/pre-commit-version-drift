@@ -73,15 +73,17 @@ routinely older than the pin.
 
 ## Versioning and release
 
-Conventional commits, and **no release process at all**. The repo is
-deliberately untagged: consumers put `rev: ""` in their
-`.pre-commit-config.yaml` and `pre-commit autoupdate` resolves it to this
-branch's HEAD commit, so every merge to `main` is the release.
+Conventional commits, and releases are **tags cut by hand**. `version` in
+`pyproject.toml` is the number; the tag is generated from that line (see
+CONTRIBUTING, "Cutting a release") so the two cannot disagree. `autoupdate`
+prefers a tag containing a dot, so consumers land on the release rather than on
+a bare commit SHA.
 
-That means there is no semver to signal a breaking change, and it means **main
-is always what consumers get next**. A commit that makes an existing repo newly
-fail must say so in its message; that log is the only changelog they have.
+There is no automation. The shared `spotship/.github` release workflow is in a
+private repo with Actions access scoped to the organization, so this public repo
+cannot call it -- the same constraint that forced `clickup.yaml` to be inlined.
 
-Tags remain additive if this ever needs versioning -- `get_best_candidate_tag`
-prefers a tag containing a dot, so adding `v1.0.0` later works without consumers
-changing anything.
+Pick the number by what it does to a consumer's next commit rather than by the
+size of the diff. The hook sweeps the whole repo on every commit, so a new rule
+can fail a repo that passed yesterday even though nothing in that repo changed.
+That is a minor, and the commit message has to say so.

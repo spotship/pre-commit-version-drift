@@ -30,20 +30,19 @@ Requires Python 3.11+ to run (it uses `tomllib`); it checks repos on any version
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/spotship/pre-commit-version-drift
-    rev: ""
+    rev: v0.1.0
     hooks:
       - id: version-drift
 ```
 
-then `pre-commit autoupdate --repo https://github.com/spotship/pre-commit-version-drift`,
-which fills in the `rev`.
+`pre-commit autoupdate --repo https://github.com/spotship/pre-commit-version-drift`
+moves that `rev` to the newest release. Releases are tags, which is what
+`autoupdate` looks for — it prefers a tag containing a dot, and only falls back
+to a bare commit SHA for a repo that has none.
 
-This repo is **deliberately untagged**. With no tags, `autoupdate` resolves `rev`
-to the default branch's HEAD commit, so re-running it is how you pick up hook
-changes. Do not put `rev: main` instead: pre-commit warns that a branch is a
-mutable reference, and because the hook environment is cached per `rev`, you
-would be pinned to whichever commit you first installed — live-looking and
-frozen.
+Do not put `rev: main` instead: pre-commit warns that a branch is a mutable
+reference, and because the hook environment is cached per `rev`, you would be
+pinned to whichever commit you first installed — live-looking and frozen.
 
 Then create the source of truth. A full `X.Y.Z` buys the most, because container
 registries publish patch tags and a repo pinning only `3.12` can't say which

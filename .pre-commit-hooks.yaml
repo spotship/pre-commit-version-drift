@@ -1,16 +1,17 @@
 # Adopt with:
 #
 #   - repo: https://github.com/spotship/pre-commit-version-drift
-#     rev: ""
+#     rev: v0.1.0
 #     hooks:
 #       - id: version-drift
 #
-# then `pre-commit autoupdate --repo https://github.com/spotship/pre-commit-version-drift`.
-# This repo is deliberately untagged: with no tags autoupdate resolves rev to the
-# default branch's HEAD commit, so re-running it is how consumers pick up hook
-# changes. `rev: main` is not an alternative -- pre-commit warns that a branch is
-# a mutable reference, and since the hook environment is cached per rev, the
-# consumer stays pinned to whichever commit they first installed.
+# then `pre-commit autoupdate --repo https://github.com/spotship/pre-commit-version-drift`
+# to move to a later release. Releases are tags, which is what autoupdate looks
+# for -- it prefers a tag containing a dot and only falls back to a bare commit
+# SHA for a repo that has none. `rev: main` is not an alternative -- pre-commit
+# warns that a branch is a mutable reference, and since the hook environment is
+# cached per rev, the consumer stays pinned to whichever commit they first
+# installed.
 #
 # `always_run` + `pass_filenames: false` on purpose. The whole repo is swept on
 # every commit, because the file that most often changes -- the source-of-truth
