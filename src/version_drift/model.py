@@ -83,6 +83,16 @@ class Rule:
     pattern: re.Pattern[str]
     form: str
     globs: tuple[str, ...]
+    # A dotted path into a structured file, at most two levels
+    # ("engines.node", "devDependencies.@types/node", "packageManager").
+    #
+    # Set, the rule reads that field and applies `pattern` to its string value
+    # instead of to each line. Same contract either way -- group 1 is the version
+    # -- only the haystack changes. Parsing rather than matching is what keeps a
+    # dependency *named* "node" out of an engines check: frontend's root
+    # package.json has a top-level "pnpm" config object that any regex for
+    # `"pnpm":` would hit.
+    field: str = ""
     # Some pins are legitimate at more than one precision -- a workflow may name
     # either "3.12" or "3.12.13" and both are correct.
     also_accepts: tuple[str, ...] = ()
@@ -110,6 +120,19 @@ class Toolchain:
     inline_escape: str
     ignore_file: str
     source_pattern: re.Pattern[str] = DEFAULT_SOURCE_RE
+    # A dotted path to the version *inside* source_file, for a toolchain whose
+    # truth is a field rather than a whole file. pnpm's is
+    # `packageManager: "pnpm@9.15.9"` in package.json, and no .pnpm-version
+    # convention exists to use instead. source_pattern then extracts the version
+    # from that field's value, the same two steps that read `pypy3.10-7.3.12`
+    # out of a .python-version.
+    source_field: str = ""
+    # Files never swept, whatever the rules' globs say. Node's rules cover
+    # *.yml, which includes pnpm-lock.yaml, where third-party package names
+    # ("parse-node-version: 1.0.1") read as pins. It cannot be a global: the
+    # Python toolchain deliberately sweeps uv.lock, because a stale floor there
+    # means somebody edited pyproject.toml without re-locking.
+    skip_globs: tuple[str, ...] = ()
 
     def resolve(self, declared: str) -> dict[str, str]:
         """Expand each form template that the declared version can satisfy.
@@ -196,6 +219,14 @@ def validate(toolchain: Toolchain) -> Toolchain:
             )
         if not rule.globs:
             raise ConfigError(f"rule {rule.name!r} matches no files")
+        # Two levels is what package.json needs ("engines.node") and all a flat
+        # lookup can do. A deeper path would read as working and always miss.
+        if rule.field.count(".") > 1:
+            raise ConfigError(
+                f"rule {rule.name!r} has field {rule.field!r}; a field path is at "
+                f'most two levels deep ("engines.node"), because the lookup '
+                f"treats only the first segment as a container"
+            )
         # A floor is compared by ordering, so its form has to be a dotted version.
         # Ordering "312" against "39" is arithmetic on a number that means nothing.
         if rule.floor and "." not in toolchain.forms[rule.form]:

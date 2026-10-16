@@ -1,0 +1,79 @@
+# pnpm toolchain: the root package.json's `packageManager` field is the truth.
+#
+# There is no .pnpm-version convention to use instead. `packageManager` is the
+# Corepack field, and pnpm reads it natively too, so getting it wrong changes
+# which package manager runs -- it is load-bearing in the way a source of truth
+# has to be.
+#
+# A separate toolchain rather than part of node's, so that the engine's existing
+# "no source, not this toolchain" rule covers the polyglot case for free: every
+# repo in this estate has a package.json for semantic-release, and only the ones
+# that use pnpm set `packageManager`. Absent field, no pnpm rules, no findings.
+
+name = "pnpm"
+source_file = "package.json"
+source_field = "packageManager"
+# Corepack permits a trailing integrity hash (`pnpm@9.15.9+sha512.…`), which is
+# not part of the version.
+source_pattern = '''^pnpm@(\d+(?:\.\d+)*)(?:[+].*)?$'''
+inline_escape = "pnpm-version-ok"
+ignore_file = ".pnpm-version-ignore"
+components = 3
+
+skip_globs = [
+  "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "*.lock",
+]
+
+[forms]
+patch = "{major}.{minor}.{patch}"
+minor = "{major}.{minor}"
+major = "{major}"
+
+[globs]
+yaml = ["*.yml", "*.yaml"]
+docs = ["*.md"]
+packagejson = ["package.json"]
+config = [
+  "*Dockerfile", "*Dockerfile.*", "*.dockerfile",
+  "*.yml", "*.yaml", "*.toml", "*.sh", ".tool-versions",
+]
+
+[[rules]]
+# `pnpm@9.15.9` wherever it is written out: corepack invocations, action
+# inputs, and the README line telling a new joiner which version to activate.
+name = "pnpm-spec"
+pattern = '\bpnpm@(\d+(?:\.\d+)*)'
+form = "patch"
+also_accepts = ["minor", "major"]
+globs = ["@config", "@docs"]
+
+[[rules]]
+# The `pnpm_version:` input to the spotship/.github release workflows.
+name = "pnpm-version-input"
+pattern = '''(?<![-\w])pnpm_version:\s*['"]?(\d+(?:\.\d+)*)'''
+form = "major"
+also_accepts = ["minor", "patch"]
+globs = ["@yaml"]
+
+[[rules]]
+# `engines.pnpm: "^9.15.9"`. A range, compared on its major for the same reason
+# as engines.node: the caret forbids the next major, so a field left at ^9 after
+# a move to pnpm 10 bans the package manager the repo is pinned to. Read by
+# parsing -- the root package.json also has a top-level "pnpm" config object,
+# which is what a regex for `"pnpm":` would find first.
+name = "engines-pnpm"
+field = "engines.pnpm"
+pattern = '^\D*(\d+)'
+form = "major"
+globs = ["@packagejson"]
+
+[[rules]]
+# `packageManager` in a *workspace* package.json. pnpm honours only the root's,
+# so a copy left behind in a package misleads every reader without changing
+# anything. The root's own field is the source of truth and is excluded.
+name = "package-manager-field"
+field = "packageManager"
+pattern = '^pnpm@(\d+(?:\.\d+)*)'
+form = "patch"
+also_accepts = ["minor", "major"]
+globs = ["@packagejson"]

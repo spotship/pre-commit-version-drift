@@ -1,0 +1,3 @@
+# As .node-version-ignore: the README documents the pnpm rules with real
+# `pnpm@X.Y.Z` tokens, and this repo has no package.json to pin against.
+README.md

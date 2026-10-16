@@ -77,6 +77,7 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
                 pattern=pattern,
                 form=raw.get("form", ""),
                 globs=_expand_globs(raw.get("globs", []), groups, rule_name),
+                field=raw.get("field", ""),
                 also_accepts=tuple(raw.get("also_accepts", ())),
                 floor=bool(raw.get("floor", False)),
             )
@@ -92,6 +93,8 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
             inline_escape=data.get("inline_escape", f"{name}-version-ok"),
             ignore_file=data.get("ignore_file", f".{name}-version-ignore"),
             source_pattern=source_pattern,
+            source_field=data.get("source_field", ""),
+            skip_globs=tuple(data.get("skip_globs", ())),
         )
     )
 

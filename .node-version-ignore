@@ -1,0 +1,6 @@
+# This repo is Python; it has no .nvmrc and runs no Node. The README documents
+# the node rules using real tokens (`node:22.23.1`, `Node.js 22`), which is
+# enough for `has_pins` to conclude the language is in use and report it as
+# unchecked on every commit. Any document explaining these rules is the first
+# thing to trip them.
+README.md

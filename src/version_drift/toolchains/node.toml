@@ -1,0 +1,136 @@
+# Node toolchain: .nvmrc is the single source of truth.
+#
+# .nvmrc rather than .node-version because it is the file already in the tree,
+# `actions/setup-node`'s `node-version-file` reads it directly, and nvm, fnm,
+# asdf and mise all honour it. nvm also accepts `lts/*` and `node`, which name
+# no version; source_pattern refuses those by name, the way `system` is refused
+# for pyenv.
+
+name = "node"
+source_file = ".nvmrc"
+inline_escape = "node-version-ok"
+ignore_file = ".node-version-ignore"
+components = 3
+
+# Lockfiles name third-party packages that read as pins -- `parse-node-version:
+# 1.0.1` sits in pnpm-lock.yaml, and the rules below sweep *.yml. The
+# `(?<![-\w])` lookbehind on the two `*-version:` rules already excludes that
+# one, but a generated file nobody edits by hand has nothing worth checking in
+# it either way, and reading a 20k-line lockfile per commit is waste.
+skip_globs = [
+  "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "*.lock",
+]
+
+[forms]
+patch = "{major}.{minor}.{patch}"
+minor = "{major}.{minor}"
+major = "{major}"
+
+[globs]
+dockerfile = ["*Dockerfile", "*Dockerfile.*", "*.dockerfile"]
+yaml = ["*.yml", "*.yaml"]
+docs = ["*.md"]
+packagejson = ["package.json"]
+config = [
+  "*Dockerfile", "*Dockerfile.*", "*.dockerfile",
+  "*.yml", "*.yaml", "*.toml", "*.tf", "*.hcl", "*.sh", ".tool-versions",
+]
+
+# --- container images ------------------------------------------------------
+
+[[rules]]
+name = "node-image-patch"
+pattern = '(?:^|[/\s])node:(\d+\.\d+\.\d+)'
+form = "patch"
+globs = ["@dockerfile", "@yaml"]
+
+[[rules]]
+# `FROM node:22-alpine` and friends name only the major.
+name = "node-image-major"
+pattern = '(?:^|[/\s])node:(\d+)(?![\d.])'
+form = "major"
+globs = ["@dockerfile", "@yaml"]
+
+# --- runtimes ---------------------------------------------------------------
+
+[[rules]]
+# Lambda: `runtime: nodejs22.x`, `Runtime: nodejs22.x`.
+name = "lambda-runtime"
+pattern = '\bnodejs(\d+)\.x\b'
+form = "major"
+globs = ["@config"]
+
+[[rules]]
+# GCP Cloud Functions / Cloud Run: `runtime = "nodejs22"`. Scoped to Terraform,
+# where it is always a runtime; the undotted token is too loose for all config.
+name = "gcp-runtime"
+pattern = '\bnodejs(\d+)\b(?!\.)'
+form = "major"
+globs = ["*.tf", "*.hcl"]
+
+# --- workflows ---------------------------------------------------------------
+
+[[rules]]
+# actions/setup-node. Prefer `node-version-file: .nvmrc`, which cannot drift and
+# is never flagged. The lookbehind keeps this off a dependency called
+# `parse-node-version`.
+name = "setup-node"
+pattern = '''(?<![-\w])node-version:\s*['"]?(\d+(?:\.\d+)*)'''
+form = "patch"
+also_accepts = ["minor", "major"]
+globs = ["@yaml"]
+
+[[rules]]
+# The `node_version:` input to the spotship/.github release workflows. Written
+# "22" by most consumers and "22.x" by frontend; the capture stops at the first
+# non-numeric, so both arrive here as the major.
+name = "node-version-input"
+pattern = '''(?<![-\w])node_version:\s*['"]?(\d+(?:\.\d+)*)'''
+form = "major"
+also_accepts = ["minor", "patch"]
+globs = ["@yaml"]
+
+# --- package.json -------------------------------------------------------------
+# Read by parsing, not matching. A dependency named "node" must not be mistaken
+# for an engines constraint, and frontend's root package.json carries a
+# top-level "pnpm" config object that any regex for a quoted key would hit.
+#
+# Each of these is a *range* -- ">=22 <23", "^22.20.1" -- and the major is the
+# part that has to agree. Comparing the range's lower bound on the major is what
+# catches the drift that matters: a caret or `<23` upper bound excludes the next
+# major, so a repo that moves .nvmrc to 24 and leaves ">=22 <23" behind has an
+# engines field that now forbids the interpreter it runs on. Reading these as
+# floors would pass exactly that case.
+
+[[rules]]
+name = "engines-node"
+field = "engines.node"
+pattern = '^\D*(\d+)'
+form = "major"
+globs = ["@packagejson"]
+
+[[rules]]
+# @types/node tracks the runtime's major: types for 22 on a repo running 24
+# describe APIs that are not there.
+name = "types-node-dev"
+field = "devDependencies.@types/node"
+pattern = '^\D*(\d+)'
+form = "major"
+globs = ["@packagejson"]
+
+[[rules]]
+name = "types-node-prod"
+field = "dependencies.@types/node"
+pattern = '^\D*(\d+)'
+form = "major"
+globs = ["@packagejson"]
+
+# --- documentation prose -------------------------------------------------------
+
+[[rules]]
+# "Node.js 22.x" in a README. Capital N, as documentation writes it; the capture
+# stops before a ".x" suffix, so the major is what gets compared.
+name = "prose-node"
+pattern = '\bNode(?:\.js)?\s+v?(\d+)(?:\.[\dx]+)*'
+form = "major"
+globs = ["@docs"]

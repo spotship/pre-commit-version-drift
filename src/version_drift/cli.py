@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 from . import config
-from .model import COMPONENT_NAMES, ConfigError
-from .scan import Result, repo_root, scan
+from .model import COMPONENT_NAMES, ConfigError, declared_version
+from .scan import Result, has_pins, read_declared, repo_root, scan
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,17 +86,32 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     results: dict[str, Result] = {}
+    absent: list[str] = []
     for name, toolchain in sorted(selected.items()):
-        source = root / toolchain.source_file
+        found = args.declared.strip() if args.declared else read_declared(root, toolchain)
         if args.declared:
-            declared = args.declared.strip()
-        elif source.is_file():
-            declared = source.read_text(encoding="utf-8").strip()
-        else:
-            # A Python repo has no .nvmrc. Absence means "not this toolchain",
-            # never "nothing to check" -- that verdict is made below, once every
-            # toolchain has had its say.
+            # Parse it here, under its own name. Left to the scan, a bad
+            # --declared is reported as something the source file said -- and for
+            # a field-sourced toolchain it is easy to pass "10.1.0" where the
+            # field's own form ("pnpm@10.1.0") is what stands in.
+            try:
+                declared_version(found, "--declared", toolchain.source_pattern)
+            except ConfigError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+        if found is None:
+            # A Python repo has no .nvmrc, and has a package.json for
+            # semantic-release that carries no `packageManager`. Either absence
+            # means "not this toolchain", never "nothing to check" -- that
+            # verdict is made below, once every toolchain has had its say.
+            if has_pins(root, toolchain):
+                absent.append(
+                    f"{name} ({toolchain.source_file}"
+                    + (f" has no {toolchain.source_field}" if toolchain.source_field else " absent")
+                    + ")"
+                )
             continue
+        declared = found
         try:
             results[name] = scan(root, toolchain, declared, fix=args.fix)
         except ConfigError as exc:
@@ -104,13 +119,29 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     if not results:
-        expected = ", ".join(sorted(t.source_file for t in selected.values()))
+        expected = ", ".join(
+            sorted(
+                f"{t.source_file} ({t.source_field})" if t.source_field else t.source_file
+                for t in selected.values()
+            )
+        )
         print(
             f"error: no source-of-truth file found in {root}. Create one of: "
             f"{expected} -- it is what every other version pin is checked against.",
             file=sys.stderr,
         )
         return 1
+
+    # One toolchain resolving says nothing about the others. A Python repo
+    # carrying a `packageManager` for semantic-release now satisfies the "some
+    # source exists" test above on pnpm alone, which would turn the loud "no
+    # source of truth" error into a pass that reads as a clean bill of health
+    # while no Python pin in the repo has been looked at.
+    if absent:
+        print(
+            f"Not checked: {', '.join(absent)}. This repo has pins those rules "
+            f"would read, and nothing is checking them."
+        )
 
     multiple = len(results) > 1
     for name, result in results.items():
@@ -157,16 +188,17 @@ def main(argv: list[str] | None = None) -> int:
             for finding in result.findings:
                 print(finding.render(), file=sys.stderr)
 
-    if any(not result.ok() for result in results.values()):
-        escapes = sorted({t.inline_escape for t in selected.values()})
-        ignores = sorted({t.ignore_file for t in selected.values()})
-        print(
-            f"\nFix the pins, or add an inline `{escapes[0]}` comment / a glob in "
-            f"{ignores[0]} if a pin genuinely cannot track the repo version.",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
+            # Named per toolchain, not once at the end. Each has its own escape
+            # and its own ignore file, and pointing a pnpm finding at
+            # `node-version-ok` sends the reader to a hatch that will not open.
+            print(
+                f"\n{label}Fix the pins, or add an inline `{toolchain.inline_escape}` "
+                f"comment / a glob in {toolchain.ignore_file} if a pin genuinely "
+                f"cannot track the repo version.",
+                file=sys.stderr,
+            )
+
+    return 1 if any(not result.ok() for result in results.values()) else 0
 
 
 if __name__ == "__main__":

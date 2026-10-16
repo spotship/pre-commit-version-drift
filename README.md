@@ -81,7 +81,7 @@ a wrong patch cannot be detected from it.
 `python:3.12` would delete a component the tag needs — so it reports those
 instead of touching them.
 
-## What it checks
+## What it checks: Python
 
 Three forms are derived from `.python-version`:
 
@@ -185,39 +185,98 @@ every case below, because the version component *is* correct afterwards:
 - **Tracked symlinks are followed**, so a link pointing outside the repo gets
   that file edited in place, where `git status` won't show it.
 
+## Node and pnpm
+
+Two more built-in toolchains, with their own sources of truth:
+
+| Toolchain | Source of truth |
+|---|---|
+| python | `.python-version` |
+| node | `.nvmrc` |
+| pnpm | `package.json` → `packageManager` |
+
+`.nvmrc` rather than `.node-version`: `actions/setup-node`'s `node-version-file`
+reads it, and nvm, fnm, asdf and mise all honour it. `lts/*` and `node` are
+refused by name, as `system` is for pyenv.
+
+pnpm has no version file at all — there is no `.pnpm-version` convention. Its pin
+is the Corepack `packageManager` field, which pnpm also reads natively, so
+getting it wrong changes which package manager runs.
+
+| Rule | Reads |
+|------|-------|
+| `node-image-patch` / `node-image-major` | `node:22.23.1`, `node:22-alpine` |
+| `lambda-runtime` | `runtime: nodejs22.x` |
+| `gcp-runtime` | `runtime = "nodejs22"` (Terraform) |
+| `setup-node` | `node-version: '22.23.1'` |
+| `node-version-input` | `node_version: "22.x"` |
+| `engines-node` | `"engines": {"node": ">=22 <23"}` |
+| `types-node-dev` / `types-node-prod` | `"@types/node": "^22.20.1"` |
+| `prose-node` | `Node.js 22` in `*.md` |
+| `pnpm-spec` | `pnpm@9.15.9` |
+| `pnpm-version-input` | `pnpm_version: "9"` |
+| `engines-pnpm` | `"engines": {"pnpm": "^9.15.9"}` |
+| `package-manager-field` | `packageManager` in a *workspace* package.json |
+
+Prefer `node-version-file: .nvmrc`, which is never flagged.
+
+### Fields are parsed, not matched
+
+`engines.node`, `engines.pnpm` and `@types/node` are read by parsing
+`package.json` and looking up a dotted path, because a regex cannot tell a pin
+from a package that happens to be named like one — a dependency called `node`,
+or the top-level `"pnpm": { "overrides": … }` config object that sits in the same
+file as `engines.pnpm`.
+
+Each of those fields holds a *range*, and the major is the part checked. That is
+deliberately not a floor: a caret or a `<23` upper bound **excludes** the next
+major, so a repo that moves `.nvmrc` to 24 and leaves `">=22 <23"` behind has an
+engines field forbidding the runtime it is pinned to. Reading it as a floor would
+pass exactly that case.
+
+Two consequences worth knowing:
+
+- **`--fix` never touches a field.** Rewriting would reserialise the file, and
+  the right replacement for a range is a judgement about how wide it should be.
+- **There is no inline escape**, because JSON has no comments. A field that
+  genuinely cannot track the repo version needs its file in the ignore file.
+
 ## Other toolchains
 
-The engine is not Python-specific; the Python rules are a TOML file it ships.
-Add your own in `.version-drift.toml` at the repo root:
+The engine is not language-specific; every built-in toolchain is a TOML file it
+ships. Add your own in `.version-drift.toml` at the repo root:
 
 ```toml
-[toolchain.node]
-source_file = ".nvmrc"
+[toolchain.ruby]
+source_file = ".ruby-version"
 components = 3
 
-[toolchain.node.forms]
-full = "{major}.{minor}.{patch}"
-major = "{major}"
+[toolchain.ruby.forms]
+patch = "{major}.{minor}.{patch}"
+minor = "{major}.{minor}"
 
-[toolchain.node.globs]
+[toolchain.ruby.globs]
 yaml = ["*.yml", "*.yaml"]
 
-[[toolchain.node.rules]]
-name = "setup-node"
-pattern = '''node-version:\s*['"]?(\d+\.\d+\.\d+)'''
-form = "full"
+[[toolchain.ruby.rules]]
+name = "setup-ruby"
+pattern = '''ruby-version:\s*['"]?(\d+\.\d+\.\d+)'''
+form = "patch"
 globs = ["@yaml"]
 
-[[toolchain.node.rules]]
+[[toolchain.ruby.rules]]
 name = "docker-image"
-pattern = '(?:^|[/\s])node:(\d+)(?![\d.])'
-form = "major"
+pattern = '(?:^|[/\s])ruby:(\d+\.\d+)(?![\d.])'
+form = "minor"
 globs = ["*Dockerfile"]
 ```
 
-Every toolchain whose source file exists gets checked. A toolchain whose file is
-absent is skipped — a Python repo has no `.nvmrc`, and that isn't a finding. If
-*no* source file is found at all, that is an error rather than a silent pass.
+Every toolchain whose source exists gets checked. One whose source is absent is
+skipped — a Python repo has no `.nvmrc`, and that isn't a finding. For a
+field-sourced toolchain the *field's* absence skips it too, which is what keeps
+pnpm quiet in the many repos that have a `package.json` only for
+semantic-release. If *no* source is found at all, that is an error rather than a
+silent pass.
 
 Patterns must capture exactly one group: the version. Forms are templates over
 `{major}`, `{minor}`, `{patch}`. Glob groups declared under `[toolchain.X.globs]`
@@ -225,9 +284,14 @@ are referenced as `@name`. `enabled = false` turns off a built-in toolchain.
 
 `components` is how many components the file needs for *every* rule to run at
 full precision, not a precondition for running at all — a shorter file degrades
-as described above. A toolchain whose source file holds more than a bare version
-adds a `source_pattern` capturing the dotted run out of it; the default accepts
-`X`, `X.Y`, `X.Y.Z` and a leading `v`.
+as described above. A toolchain whose source holds more than a bare version adds
+a `source_pattern` capturing the dotted run out of it; the default accepts `X`,
+`X.Y`, `X.Y.Z` and a leading `v`. `source_field` points at a version inside a
+structured file, and `skip_globs` excludes files the rules would otherwise sweep
+— node sets it to the lockfiles, while Python deliberately sweeps `uv.lock`.
+
+A rule with `field` set reads that dotted path out of the parsed file and applies
+its `pattern` to the value; without one, the pattern runs over each line.
 
 Bad definitions are rejected at load time, naming the rule — an unknown form, a
 pattern with two groups, a floor on an undotted form.
@@ -239,7 +303,12 @@ because a hook that cries wolf gets `--no-verify`'d. It does **not** catch:
 
 - Digests. `python:3.12@sha256:…` is checked on the tag only; the digest can point
   anywhere.
-- Anything in `*.json`, including `.devcontainer/devcontainer.json`.
+- JSON, except the `package.json` fields named above. Those are addressed by
+  path; nothing scans JSON generally, so `.devcontainer/devcontainer.json` and a
+  notebook's `kernelspec` are not read.
+- Non-scalar workflow values. `python-version: ['3.11', '3.12']` and the block
+  form are both invisible — the patterns expect a value on the same line, so a
+  stale entry in a test matrix goes unread.
 - Space-separated lowercase forms: `uv python install 3.11`.
 - Full indirection: `FROM python:${PY}-slim` where `PY` came from outside the
   Dockerfile. The `ARG` form is caught; a build-arg default supplied by CI is not.

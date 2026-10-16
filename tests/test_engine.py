@@ -184,6 +184,23 @@ def test_an_invalid_pattern_is_rejected():
         )
 
 
+def test_a_field_path_deeper_than_two_levels_is_rejected():
+    """The lookup treats only the first segment as a container, so a deeper path
+    would read as working and always miss."""
+    with pytest.raises(ConfigError, match="at most two levels deep"):
+        _toolchain(
+            rules=[
+                {
+                    "name": "r",
+                    "pattern": r"(\d+)",
+                    "field": "a.b.c",
+                    "form": "minor",
+                    "globs": ["*.json"],
+                }
+            ]
+        )
+
+
 def test_a_toolchain_without_a_source_file_is_rejected():
     with pytest.raises(ConfigError, match="no source_file"):
         toolchain_from_dict("x", {"forms": {"a": "{major}"}})
