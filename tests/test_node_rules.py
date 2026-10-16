@@ -294,3 +294,21 @@ def test_a_language_the_repo_does_not_use_is_not_mentioned(make_repo, run_cli):
     result = run_cli(repo)
     assert result.code == 0
     assert result.out == ""
+
+
+def test_an_absent_source_file_is_not_described_as_a_missing_field(make_repo, run_cli):
+    """ "package.json has no packageManager" is only true when the file is there.
+
+    Said of a repo with no package.json at all, it sends the reader looking for a
+    field in a file that does not exist. Needs a second toolchain that *does*
+    resolve, because with nothing resolving the louder "no source of truth at
+    all" error covers the same ground first.
+    """
+    repo = make_repo(
+        {"README.md": "activate with `corepack prepare pnpm@9.7.0`\n"},
+        version=NVMRC,
+        source=".nvmrc",
+    )
+    result = run_cli(repo)
+    assert result.code == 0
+    assert "Not checked: pnpm (package.json absent)" in result.out

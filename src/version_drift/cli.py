@@ -105,11 +105,16 @@ def main(argv: list[str] | None = None) -> int:
             # means "not this toolchain", never "nothing to check" -- that
             # verdict is made below, once every toolchain has had its say.
             if has_pins(root, toolchain):
-                absent.append(
-                    f"{name} ({toolchain.source_file}"
-                    + (f" has no {toolchain.source_field}" if toolchain.source_field else " absent")
-                    + ")"
+                # "package.json has no packageManager" is only true when the file
+                # is there. Said of a repo that has no package.json at all, it
+                # sends the reader looking for a field in a file that does not
+                # exist.
+                missing = (
+                    f"has no {toolchain.source_field}"
+                    if toolchain.source_field and (root / toolchain.source_file).is_file()
+                    else "absent"
                 )
+                absent.append(f"{name} ({toolchain.source_file} {missing})")
             continue
         declared = found
         try:

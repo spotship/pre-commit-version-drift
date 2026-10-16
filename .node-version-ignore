@@ -4,3 +4,8 @@
 # unchecked on every commit. Any document explaining these rules is the first
 # thing to trip them.
 README.md
+
+# The toolchain definitions cite the token shapes their rules match
+# (`nodejs22.x`, `pnpm@9.15.9`) as illustrations. Same reason .python-version-ignore
+# excludes this directory: a rule's own documentation is the first thing it trips.
+src/version_drift/toolchains/*

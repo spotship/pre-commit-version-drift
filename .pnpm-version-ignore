@@ -1,3 +1,8 @@
 # As .node-version-ignore: the README documents the pnpm rules with real
 # `pnpm@X.Y.Z` tokens, and this repo has no package.json to pin against.
 README.md
+
+# The toolchain definitions cite the token shapes their rules match
+# (`nodejs22.x`, `pnpm@9.15.9`) as illustrations. Same reason .python-version-ignore
+# excludes this directory: a rule's own documentation is the first thing it trips.
+src/version_drift/toolchains/*
