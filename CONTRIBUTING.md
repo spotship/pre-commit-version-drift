@@ -6,15 +6,14 @@ that cries wolf gets `--no-verify`'d and then catches nothing at all.
 
 ## Project status
 
-Pre-release, and **deliberately untagged**. Consumers pin a commit SHA via
-`pre-commit autoupdate`, and re-running it is how they move forward — see
-**Install** in the README. The engine's TOML contract (forms, rules, globs,
-`field`, `source_field`) may still change.
+Pre-1.0. Releases are tags and consumers pin one — see **Install** in the README
+— but the engine's TOML contract (forms, rules, globs, `field`, `source_field`)
+may still change between minors.
 
-Because there is no semver, a new rule reaches a consumer as "my unrelated
-commit now fails pre-commit". That is the cost of this choice and it is on us to
-soften: anything that makes an existing repo newly fail should say so plainly in
-its commit message.
+A version number does not soften a new rule. It still reaches a consumer as "my
+unrelated commit now fails pre-commit", because the hook sweeps the whole repo
+rather than the diff. Anything that makes an existing repo newly fail belongs in
+its own minor and must say so plainly in its commit message.
 
 ## Code of Conduct
 
@@ -99,6 +98,27 @@ Please include both a case that fires and a case that must stay silent.
 
 CI runs pre-commit, the test matrix, the packaged-hook jobs and the
 `requires-python` floor check. All must pass.
+
+## Cutting a release
+
+Maintainers only, and by hand. The shared `spotship/.github` release workflow
+lives in a private repo with Actions access scoped to the organization, so a
+public repo cannot call it — the same constraint that forced `clickup.yaml` to be
+inlined here.
+
+Bump `version` in `pyproject.toml` in its own PR. Once that is merged, derive the
+tag from the line rather than retyping it:
+
+```sh
+git switch main && git pull
+v=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)
+git tag "v$v" && git push origin "v$v"
+gh release create "v$v" --generate-notes
+```
+
+Choose the number by what it does to a consumer's next commit, not by the size of
+the diff. A new rule or a widened pattern is a minor, because it can fail a repo
+that passed yesterday without anything in that repo changing.
 
 ## Reporting bugs and requesting features
 
