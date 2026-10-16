@@ -331,3 +331,114 @@ def test_fix_on_a_clean_repo_changes_nothing(make_repo, run_cli):
     result = run_cli(repo, "--fix")
     assert result.code == 0
     assert result.out == ""
+
+
+# --------------------------------------------------------------------------
+# What .python-version actually contains.
+#
+# The file is written by pyenv, uv and Heroku's buildpack, not by this tool, and
+# they disagree about its format. Every value below is one of them writing it.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("version", "writer"),
+    [
+        ("3.12.13", "pyenv local / uv python pin"),
+        ("3.12", "Heroku's recommended form"),
+        ("3.13t", "uv, free-threaded"),
+        ("cpython@3.12", "uv request syntax"),
+        ("cpython-3.12.13-macos-aarch64-none", "uv, fully qualified"),
+        ("pypy3.10-7.3.12", "pyenv; 3.10 is the language version"),
+        ("pypy@3.10", "uv"),
+    ],
+)
+def test_real_world_source_files_are_readable(make_repo, run_cli, version, writer):
+    """None of these may fail the commit. A drift checker that rejects the file
+    its own ecosystem writes is not strict, it is uninstallable."""
+    repo = make_repo({"README.md": "# project\n"}, version=version)
+    result = run_cli(repo)
+    assert result.code == 0, f"{writer} writes {version!r} and it was rejected: {result.err}"
+
+
+@pytest.mark.parametrize("version", ["graalpy-24.1.0", "system", "nightly"])
+def test_a_source_file_naming_no_python_version_is_rejected(make_repo, run_cli, version):
+    """`graalpy-24.1.0` carries a GraalVM release, not a language version. Reading
+    its 24 as a major would resolve every form to nonsense and flag the whole
+    repo, so it is refused by name instead."""
+    repo = make_repo({"README.md": "# project\n"}, version=version)
+    result = run_cli(repo)
+    assert result.code == 2
+    assert "names no version" in result.err
+
+
+def test_the_first_line_wins(make_repo, run_cli):
+    """`pyenv local 3.12 3.11` writes one version per line and resolves its shims
+    to the first. The rest are alternates on PATH, not a second opinion."""
+    repo = make_repo({"Dockerfile": "FROM python:3.12.13-slim\n"}, version="3.12.13\n3.11.9")
+    assert run_cli(repo).code == 0
+
+
+# --------------------------------------------------------------------------
+# Reduced precision: what a two-component file can and cannot check
+# --------------------------------------------------------------------------
+
+
+def test_a_minor_only_file_still_catches_minor_drift(make_repo, run_cli):
+    repo = make_repo({"src/Dockerfile": "FROM public.ecr.aws/lambda/python:3.9\n"}, version="3.12")
+    result = run_cli(repo)
+    assert result.code == 1
+    assert "[docker-image-minor] found '3.9', expected 3.12" in result.err
+
+
+def test_a_minor_only_file_stands_down_on_patch_pins(make_repo, run_cli):
+    """3.12.9 may well be wrong, but "3.12" cannot say so. Reporting it would mean
+    inventing the patch to compare against."""
+    repo = make_repo({"Dockerfile": "FROM python:3.12.9-slim\n"}, version="3.12")
+    assert run_cli(repo).code == 0
+
+
+def test_reduced_precision_is_reported(make_repo, run_cli):
+    """Passing while silently checking less than advertised is the same silent
+    pass this tool exists to end, so the lost precision is stated."""
+    repo = make_repo({"Dockerfile": "FROM python:3.12-slim\n"}, version="3.12")
+    result = run_cli(repo)
+    assert result.code == 0
+    assert ".python-version supplies 2 of 3 components" in result.out
+    assert "a wrong patch cannot be detected from it" in result.out
+
+
+def test_full_precision_reports_no_reduced_coverage(make_repo, run_cli):
+    repo = make_repo({"Dockerfile": "FROM python:3.12.13-slim\n"})
+    result = run_cli(repo)
+    assert result.code == 0
+    assert result.out == ""
+
+
+def test_fix_reports_what_it_cannot_safely_rewrite(make_repo, run_cli):
+    """--fix writes `rule.form` literally, and with no patch to write, rewriting
+    `python:3.11.9` to `python:3.12` would delete a component the tag needs. So
+    the pin is left alone -- but it is still wrong at the minor, and saying
+    nothing about it is what the previous behaviour got wrong."""
+    repo = make_repo({"Dockerfile": "FROM python:3.11.9-slim\n"}, version="3.12")
+    result = run_cli(repo, "--fix")
+    assert result.code == 1
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == "FROM python:3.11.9-slim\n"
+    assert "[docker-image-patch] found '3.11.9'" in result.err
+
+
+def test_a_minor_only_file_still_catches_a_patch_pin_wrong_at_the_minor(make_repo, run_cli):
+    """The hole that standing rules down entirely would leave open.
+
+    `python:3.9.1` is three components, so the minor rule's pattern refuses it and
+    only the patch rule can see it. If that rule stands down for want of a patch
+    to compare against, a Lambda three minor versions behind goes unread -- which
+    is the exact finding this tool was built on.
+    """
+    repo = make_repo(
+        {"src/summarizer/Dockerfile": "FROM public.ecr.aws/lambda/python:3.9.1\n"},
+        version="3.12",
+    )
+    result = run_cli(repo)
+    assert result.code == 1
+    assert "[docker-image-patch] found '3.9.1', expected 3.12" in result.err

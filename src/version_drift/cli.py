@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import config
-from .model import ConfigError
+from .model import COMPONENT_NAMES, ConfigError
 from .scan import Result, repo_root, scan
 
 
@@ -115,6 +115,26 @@ def main(argv: list[str] | None = None) -> int:
     multiple = len(results) > 1
     for name, result in results.items():
         label = f"[{name}] " if multiple else ""
+        toolchain = selected[name]
+
+        # Say so when the source file is less precise than the rule set. The scan
+        # still passes -- a file saying "3.12" cannot adjudicate a patch, and
+        # inventing one would manufacture drift -- but a consumer who thinks
+        # every pin is covered should not have to read the source to find out
+        # otherwise.
+        if result.declared_components < toolchain.components:
+            print(
+                f"{label}{toolchain.source_file} supplies "
+                f"{result.declared_components} of {toolchain.components} components, so pins "
+                f"are compared on their first {result.declared_components}: a wrong "
+                f"{COMPONENT_NAMES[result.declared_components]} cannot be detected from it."
+            )
+        if result.unchecked:
+            print(
+                f"{label}{len(result.unchecked)} rule(s) have no form this "
+                f"{toolchain.source_file} can fill, and did not run: "
+                f"{', '.join(sorted(result.unchecked))}"
+            )
 
         if result.fixed:
             print(f"{label}Rewrote version pins in {len(result.fixed)} file(s):")

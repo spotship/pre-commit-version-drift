@@ -8,9 +8,30 @@ name = "python"
 source_file = ".python-version"
 inline_escape = "python-version-ok"
 ignore_file = ".python-version-ignore"
-# X.Y.Z required: docker.io/python publishes patch tags, so a repo pinning only
-# "3.12" could not say which image it means.
+# X.Y.Z is what every rule below needs: docker.io/python publishes patch tags, so
+# a repo pinning only "3.12" cannot say which image it means. Fewer components is
+# allowed and reported -- the patch-precision rules stand down rather than guess.
+# Heroku recommends the two-component form so that builds pick up security
+# patches, and uv's `python pin` writes whatever it was given, so insisting on
+# three would lock the hook out of those repos rather than make them accurate.
 components = 3
+
+# .python-version is written by pyenv, uv and Heroku's buildpack, and they put
+# more than a bare version in it:
+#
+#   3.12.13                             pyenv, uv, Heroku
+#   3.12                                pyenv, uv, Heroku's recommended form
+#   3.13t                               uv, free-threaded builds
+#   cpython@3.12                        uv request syntax
+#   cpython-3.12.13-macos-aarch64-none  uv, fully-qualified request
+#   pypy3.10-7.3.12                     pyenv; 3.10 is the *language* version,
+#                                       7.3.12 is the PyPy release
+#
+# Only CPython and PyPy name the language version in a position this can read.
+# `graalpy-24.1.0` carries a GraalVM release instead, and `system` names no
+# version at all -- both are rejected by name rather than mis-read as 24.1 or
+# silently passed.
+source_pattern = '''^(?:(?:cpython|pypy)[@-]?)?v?(\d+(?:\.\d+)*)t?(?:[-+@].*)?$'''
 
 [forms]
 patch = "{major}.{minor}.{patch}"

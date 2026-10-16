@@ -96,19 +96,45 @@ def test_forms_expand_from_the_declared_version():
     assert toolchain.resolve("3.12.13") == {"patch": "3.12.13", "minor": "3.12", "nodot": "312"}
 
 
-def test_a_source_file_with_too_few_components_is_rejected():
-    with pytest.raises(ConfigError, match="at least 3 version components"):
-        _toolchain(components=3).resolve("3.12")
+def test_a_short_source_file_resolves_only_the_forms_it_can_fill():
+    """`components` is what every rule needs, not a precondition for running.
+
+    A file saying "3.12" cannot adjudicate a patch, so the patch form is simply
+    absent -- and the rules written in it stand down rather than guess a patch
+    and report drift against it.
+    """
+    toolchain = _toolchain(
+        components=3,
+        forms={
+            "patch": "{major}.{minor}.{patch}",
+            "minor": "{major}.{minor}",
+            "nodot": "{major}{minor}",
+        },
+    )
+    assert toolchain.resolve("3.12") == {"minor": "3.12", "nodot": "312"}
 
 
-def test_a_form_referencing_a_missing_component_is_rejected():
+def test_a_source_file_too_short_for_every_form_is_rejected():
+    """Dropping forms is graceful degradation; dropping all of them is not. With
+    nothing left to compare against, the scan would pass every file vacuously."""
     toolchain = _toolchain(
         components=1,
         forms={"patch": "{major}.{minor}.{patch}"},
         rules=[{"name": "r", "pattern": r"x(\d+\.\d+)", "form": "patch", "globs": ["*.txt"]}],
     )
-    with pytest.raises(ConfigError, match="only supplies 1 component"):
+    with pytest.raises(ConfigError, match="not enough for any form"):
         toolchain.resolve("3")
+
+
+def test_a_form_referencing_a_non_component_is_rejected_at_load_time():
+    """A typo in a form must not be mistaken for a component the file lacks.
+
+    resolve() drops an unfillable form silently, so without this check
+    "{pacth}" would take its rules quietly out of the scan and look exactly like
+    a two-component source file.
+    """
+    with pytest.raises(ConfigError, match="'pacth', which is not a version component"):
+        _toolchain(forms={"typo": "{major}.{minor}.{pacth}"})
 
 
 # --------------------------------------------------------------------------
@@ -328,11 +354,24 @@ def test_a_missing_source_file_is_an_error(make_repo, run_cli):
     assert ".python-version" in result.err
 
 
-def test_a_malformed_source_file_is_an_error(make_repo, run_cli):
-    repo = make_repo({"Dockerfile": "FROM alpine\n"}, version="3.12")
+def test_a_source_file_naming_no_version_is_an_error(make_repo, run_cli):
+    """`system` is a legitimate pyenv value, and it means "whatever is on PATH".
+
+    That is a refusal to pin, so there is no pin to check anything against. It
+    fails loudly for the same reason an absent file does -- quietly passing every
+    file in the repo is the outcome this tool exists to prevent.
+    """
+    repo = make_repo({"Dockerfile": "FROM alpine\n"}, version="system")
     result = run_cli(repo)
     assert result.code == 2
-    assert "at least 3 version components" in result.err
+    assert "names no version" in result.err
+
+
+def test_an_empty_source_file_is_an_error(make_repo, run_cli):
+    repo = make_repo({"Dockerfile": "FROM alpine\n"}, version="")
+    result = run_cli(repo)
+    assert result.code == 2
+    assert "is empty" in result.err
 
 
 def test_a_binary_file_is_skipped(make_repo, run_cli):

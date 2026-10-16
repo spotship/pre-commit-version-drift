@@ -12,6 +12,7 @@ Nothing in here is Python-specific. The Python rules are data; see
 from __future__ import annotations
 
 import re
+import string
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -21,6 +22,12 @@ from dataclasses import dataclass
 COMPONENT_NAMES = ("major", "minor", "patch")
 
 _VERSION_RE = re.compile(r"^v?(\d+(?:\.\d+)*)$")
+
+# The default reader for a source-of-truth file: a bare dotted version, nothing
+# else. A toolchain whose file is written by tools that put more in it supplies
+# its own `source_pattern` -- see toolchains/python.toml, where pyenv and uv
+# between them write `3.13t`, `cpython@3.12` and `pypy3.10-7.3.12`.
+DEFAULT_SOURCE_RE = re.compile(r"^v?(\d+(?:\.\d+)*)$")
 
 
 class ConfigError(ValueError):
@@ -37,6 +44,35 @@ def parse_version(text: str) -> tuple[int, ...]:
     if not match:
         raise ConfigError(f"{text!r} is not a dotted numeric version")
     return tuple(int(part) for part in match.group(1).split("."))
+
+
+def declared_version(
+    text: str, source_file: str, source_pattern: re.Pattern[str]
+) -> tuple[int, ...]:
+    """Read a source-of-truth file's contents into version components.
+
+    This is deliberately not ``parse_version``. That one compares values captured
+    out of a repo's own files, which are always bare dotted numbers because a
+    rule's pattern says so. *This* one reads a file written by somebody else's
+    tool, and those tools disagree about the format.
+
+    Only the first non-blank line is read. ``pyenv local 3.12 3.11`` writes one
+    version per line and resolves its shims to the first, so the later lines are
+    alternates on PATH rather than a second opinion about what the repo runs on.
+    """
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate:
+            continue
+        match = source_pattern.match(candidate)
+        if not match:
+            raise ConfigError(
+                f"{source_file} says {candidate!r}, which names no version this "
+                f"toolchain can read. Pins are checked against it, so there is "
+                f"nothing to check until it holds one"
+            )
+        return tuple(int(part) for part in match.group(1).split("."))
+    raise ConfigError(f"{source_file} is empty; it is what every pin is checked against")
 
 
 @dataclass(frozen=True)
@@ -63,39 +99,88 @@ class Toolchain:
     source_file: str
     forms: Mapping[str, str]
     rules: tuple[Rule, ...]
+    # How many components the source file must supply for *every* rule to run.
+    # Fewer is allowed: the forms that need the missing components cannot be
+    # built, so the rules written in them are skipped and the scan reports the
+    # reduced coverage. This is not laxity -- a repo whose file says "3.12"
+    # genuinely cannot say whether `python:3.12.9` is the right patch, and
+    # guessing one would invent drift. Heroku recommends the two-component form
+    # outright, so demanding three locks the tool out of those repos entirely.
     components: int
     inline_escape: str
     ignore_file: str
+    source_pattern: re.Pattern[str] = DEFAULT_SOURCE_RE
 
     def resolve(self, declared: str) -> dict[str, str]:
-        """Expand every form template against a declared version.
+        """Expand each form template that the declared version can satisfy.
 
         ``{"patch": "{major}.{minor}.{patch}"}`` and ``"3.12.13"`` gives
-        ``{"patch": "3.12.13"}``.
+        ``{"patch": "3.12.13"}``. The same form against ``"3.12"`` gives nothing
+        -- the patch is not knowable, so no rule may claim to check it.
         """
-        values = parse_version(declared)
-        if len(values) < self.components:
-            raise ConfigError(
-                f"{self.source_file} must hold at least {self.components} "
-                f"version components for the {self.name} toolchain, got {declared!r}"
-            )
+        values = declared_version(declared, self.source_file, self.source_pattern)
         parts = dict(zip(COMPONENT_NAMES, values, strict=False))
         resolved: dict[str, str] = {}
         for name, template in self.forms.items():
             try:
                 resolved[name] = template.format(**parts)
-            except (KeyError, IndexError) as exc:
-                raise ConfigError(
-                    f"form {name!r} of toolchain {self.name!r} references {exc} "
-                    f"but {self.source_file} only supplies {len(values)} component(s)"
-                ) from exc
+            except KeyError:
+                # Only an absent *component* reaches here; validate() has
+                # already rejected a form naming something that is not one.
+                continue
+        if not resolved:
+            raise ConfigError(
+                f"{self.source_file} supplies {len(values)} component(s) "
+                f"({'.'.join(str(v) for v in values)}), which is not enough for any "
+                f"form of the {self.name} toolchain: {sorted(self.forms)}"
+            )
         return resolved
+
+    def fallback_form(self, form: str, resolved: Mapping[str, str]) -> tuple[str, int] | None:
+        """The coarsest-but-longest form to check `form` against when it is absent.
+
+        Standing a rule down whenever its own form is unbuildable leaves a hole
+        big enough to swallow the thing this tool is for: against a source file
+        saying "3.12", the patch rule cannot run, and the minor rule's pattern
+        refuses a three-component tag, so ``python:3.9.1`` would pass unread.
+
+        A dotted form whose template is a prefix of the absent one shares its
+        leading components, so the captured value can be truncated to that many
+        and compared. ``{major}.{minor}`` is a prefix of
+        ``{major}.{minor}.{patch}``: "3.9.1" truncates to "3.9", which is still
+        wrong, and still reported. Returns the value to compare against and how
+        many components to truncate to.
+        """
+        target = self.forms.get(form)
+        if target is None or form in resolved:
+            return None
+        best: tuple[str, int] | None = None
+        for name, template in self.forms.items():
+            if name not in resolved or not target.startswith(f"{template}."):
+                continue
+            components = template.count("{")
+            if best is None or components > best[1]:
+                best = (resolved[name], components)
+        return best
 
 
 def validate(toolchain: Toolchain) -> Toolchain:
     """Reject a toolchain that would fail confusingly mid-scan."""
     if not toolchain.forms:
         raise ConfigError(f"toolchain {toolchain.name!r} defines no forms")
+
+    # resolve() drops a form whose components the source file does not supply, so
+    # a typo like "{pacth}" would otherwise vanish into that same skip and take
+    # its rules quietly out of the scan. Catch it here, where it is a typo with a
+    # name, rather than there, where it looks like a short version file.
+    for name, template in toolchain.forms.items():
+        for _, field_name, _, _ in string.Formatter().parse(template):
+            if field_name is not None and field_name not in COMPONENT_NAMES:
+                raise ConfigError(
+                    f"form {name!r} of toolchain {toolchain.name!r} references "
+                    f"{field_name!r}, which is not a version component; "
+                    f"expected one of {list(COMPONENT_NAMES)}"
+                )
 
     for rule in toolchain.rules:
         for form in (rule.form, *rule.also_accepts):

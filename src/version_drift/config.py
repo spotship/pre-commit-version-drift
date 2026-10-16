@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from .model import ConfigError, Rule, Toolchain, validate
+from .model import DEFAULT_SOURCE_RE, ConfigError, Rule, Toolchain, validate
 
 BUILTIN_DIR = Path(__file__).parent / "toolchains"
 USER_CONFIG = ".version-drift.toml"
@@ -47,6 +47,20 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
     except KeyError as exc:
         raise ConfigError(f"toolchain {name!r} has no source_file") from exc
 
+    raw_source = data.get("source_pattern")
+    if raw_source is None:
+        source_pattern = DEFAULT_SOURCE_RE
+    else:
+        try:
+            source_pattern = re.compile(raw_source)
+        except re.error as exc:
+            raise ConfigError(f"toolchain {name!r} has an invalid source_pattern: {exc}") from exc
+        if source_pattern.groups != 1:
+            raise ConfigError(
+                f"toolchain {name!r} source_pattern must capture exactly one group "
+                f"(the dotted version); it captures {source_pattern.groups}"
+            )
+
     groups = {key: list(value) for key, value in data.get("globs", {}).items()}
     rules: list[Rule] = []
     for raw in data.get("rules", []):
@@ -77,6 +91,7 @@ def toolchain_from_dict(name: str, data: dict[str, Any]) -> Toolchain:
             components=int(data.get("components", _DEFAULTS["components"])),
             inline_escape=data.get("inline_escape", f"{name}-version-ok"),
             ignore_file=data.get("ignore_file", f".{name}-version-ignore"),
+            source_pattern=source_pattern,
         )
     )
 

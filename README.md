@@ -35,8 +35,9 @@ repos:
       - id: version-drift
 ```
 
-Then create the source of truth — a full `X.Y.Z`, because container registries
-publish patch tags and a repo pinning only `3.12` can't say which image it means:
+Then create the source of truth. A full `X.Y.Z` buys the most, because container
+registries publish patch tags and a repo pinning only `3.12` can't say which
+image it means:
 
 ```
 3.12.13
@@ -46,6 +47,39 @@ Install that interpreter locally before committing. pyenv falls through to the
 next thing on `PATH` when the requested version is missing, so `python3` **and
 `pre-commit`** quietly become different binaries inside the repo, with no error
 beyond `pyenv version-name`.
+
+### What may be in that file
+
+You don't write `.python-version` alone — pyenv, uv and Heroku's buildpack all
+write it, and they don't agree on a format. All of these are read:
+
+| Contents | Written by |
+|---|---|
+| `3.12.13` | `pyenv local`, `uv python pin` |
+| `3.12` | the same, and **Heroku's recommended form** |
+| `3.13t` | uv, free-threaded builds |
+| `cpython@3.12`, `cpython-3.12.13-macos-aarch64-none` | uv request syntax |
+| `pypy3.10-7.3.12` | pyenv — `3.10` is the language version, `7.3.12` the PyPy release |
+| several lines | `pyenv local 3.12 3.11`; the first wins, as pyenv's own shims do |
+
+`system` and `graalpy-24.1.0` are refused by name. `system` declines to pin at
+all, so there is nothing to check against; `graalpy-24.1.0` carries a GraalVM
+release rather than a language version, and reading its `24` as a major would
+flag every pin in the repo.
+
+**Fewer than three components is allowed.** The patch rules don't stand down —
+they compare on the components the file does supply, so against `3.12` a stale
+`python:3.9.1` is still caught on its `3.9`, while `python:3.12.9` passes because
+nothing in the repo can say the patch is wrong. The run says so:
+
+```
+.python-version supplies 2 of 3 components, so pins are compared on their first 2:
+a wrong patch cannot be detected from it.
+```
+
+`--fix` won't rewrite at reduced precision — turning `python:3.9.1` into
+`python:3.12` would delete a component the tag needs — so it reports those
+instead of touching them.
 
 ## What it checks
 
@@ -188,6 +222,12 @@ absent is skipped — a Python repo has no `.nvmrc`, and that isn't a finding. I
 Patterns must capture exactly one group: the version. Forms are templates over
 `{major}`, `{minor}`, `{patch}`. Glob groups declared under `[toolchain.X.globs]`
 are referenced as `@name`. `enabled = false` turns off a built-in toolchain.
+
+`components` is how many components the file needs for *every* rule to run at
+full precision, not a precondition for running at all — a shorter file degrades
+as described above. A toolchain whose source file holds more than a bare version
+adds a `source_pattern` capturing the dotted run out of it; the default accepts
+`X`, `X.Y`, `X.Y.Z` and a leading `v`.
 
 Bad definitions are rejected at load time, naming the rule — an unknown form, a
 pattern with two groups, a floor on an undotted form.
