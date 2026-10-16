@@ -34,7 +34,7 @@ version-drift = "version_drift.cli:main"
 # .pre-commit-config.yaml -- the invariant the ruff toolchain enforces. A
 # range here resolves to whatever is newest at install time and silently
 # lints differently from the hook.
-dev = ["pytest>=8", "ruff==0.15.6"]
+dev = ["pytest>=8.4.2", "ruff==0.16.10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
