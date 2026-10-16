@@ -1,3 +1,5 @@
+default_stages: [pre-commit]
+
 default_language_version:
   python: python3.12
 
@@ -7,10 +9,15 @@ repos:
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: check-json
       - id: check-toml
       - id: check-yaml
       - id: check-merge-conflict
       - id: debug-statements
+      - id: check-builtin-literals
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.6
@@ -23,3 +30,9 @@ repos:
   # a published rev rather than the working tree, so the check would lag the
   # code it is meant to gate. CI runs `pre-commit try-repo .` instead, which
   # builds the hook from HEAD.
+
+# sets up .pre-commit-ci.yaml to ensure pre-commit dependencies stay up to date
+ci:
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

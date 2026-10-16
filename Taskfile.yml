@@ -1,0 +1,40 @@
+version: '3'
+
+tasks:
+  bootstrap:
+    desc: "install pre-commit hooks"
+    cmds:
+      - pre-commit install
+
+  init:
+    desc: "install the package with dev extras, plus pre-commit hooks"
+    cmds:
+      - pip install -e '.[dev]'
+      - task: bootstrap
+
+  lint:
+    desc: "run ruff linter and formatter"
+    cmds:
+      - ruff check . {{.CLI_ARGS}}
+      - ruff format --check . {{.CLI_ARGS}}
+
+  lint-fix:
+    desc: "run ruff linter and formatter with auto-fix"
+    cmds:
+      - ruff check --fix .
+      - ruff format .
+
+  test:
+    desc: "run the test suite"
+    cmds:
+      - pytest {{.CLI_ARGS}}
+
+  check:
+    desc: "run this repo's own hook against itself"
+    cmds:
+      - version-drift
+
+  try-repo:
+    desc: "drive the packaged hook the way a consumer gets it"
+    cmds:
+      - pre-commit try-repo . version-drift --all-files

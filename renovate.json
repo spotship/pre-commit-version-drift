@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "UTC",
+  "schedule": ["* * * * 5"],
+  "dependencyDashboard": true,
+  "baseBranches": ["main"],
+  "rangeStrategy": "bump",
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* * * * 5"]
+  },
+  "separateMajorMinor": true,
+  "packageRules": [
+    {
+      "description": "Keep spotship/.github reusable workflow uses on main; never hash-pin",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["spotship/.github"],
+      "pinDigests": false
+    },
+    {
+      "description": "requires-python is the oldest interpreter a CONSUMER can install this on, not the one it is developed on. pre-commit builds a hook venv from whatever interpreter pre-commit itself runs on, which in repos with no default_language_version is routinely older than .python-version -- so raising this floor makes `pip install` fail for them with 'requires a different Python'. It is held at the tomllib floor by hand and guarded by the install-floor job in ci.yaml",
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
+    },
+    {
+      "description": "Group patch+minor per ecosystem",
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "non-major dependencies ({{{datasource}}})"
+    },
+    {
+      "description": "All GitHub Actions updates in a single PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "separateMajorMinor": false,
+      "separateMultipleMajor": false
+    },
+    {
+      "description": "Patch cooldown: 3 days",
+      "matchUpdateTypes": ["patch"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Minor cooldown: 10 days",
+      "matchUpdateTypes": ["minor"],
+      "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Major version cooldown: 30 days",
+      "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "30 days"
+    }
+  ]
+}
