@@ -1,0 +1,62 @@
+name: Feature request
+description: A new rule, a new toolchain, or a change to the engine.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A new language is a TOML file rather than a code change, so a toolchain
+        request can often be answered with a `.version-drift.toml` you write
+        yourself — see **Other toolchains** in the README. Open this if it should
+        ship as a built-in, or if the engine cannot express it.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is being asked for?
+      options:
+        - A new rule for an existing toolchain
+        - A new built-in toolchain
+        - An engine change
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: pin
+    attributes:
+      label: The pin, and what writes it
+      description: The exact text as it appears in a file, which files it appears in, and the tool or convention that produces it.
+      render: text
+      placeholder: |
+        .devcontainer/devcontainer.json:
+        "image": "mcr.microsoft.com/devcontainers/python:3.12"
+        Written by: VS Code dev containers
+    validations:
+      required: true
+  - type: textarea
+    id: false-positives
+    attributes:
+      label: Why it cannot false-positive
+      description: |
+        The bar for a new rule is that it cannot cry wolf. What could a pattern
+        for this otherwise match — a package whose name contains the token, a
+        version in prose, a compatibility matrix, the rule's own documentation?
+    validations:
+      required: true
+  - type: dropdown
+    id: pin-or-floor
+    attributes:
+      label: Pin or floor?
+      description: A floor declares the oldest version supported, which is a different fact from the one the repo runs on. Only a floor above the pin is wrong.
+      options:
+        - Pin: it must equal the source of truth
+        - Floor: it declares a minimum, and may sit below the pin
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else — links to the tool's docs, prior art, or what you are doing instead today.
+    validations:
+      required: false

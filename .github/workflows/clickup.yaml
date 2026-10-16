@@ -1,0 +1,83 @@
+name: "clickup"
+
+# Inlined rather than calling spotship/.github/.github/workflows/clickup.yaml@main
+# because this is a public repo and the shared workflow lives in a private repo
+# with Actions access scoped to the organization — GitHub only permits
+# private/internal callers in that configuration, so public repos cannot reuse
+# it. Logic mirrors the shared workflow; the dev→main release-PR-link step is
+# omitted because this repo is main-only. Kept byte-identical to rustyroute's
+# copy apart from this comment, so the two can be diffed when the shared
+# workflow changes.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, review_requested]
+  pull_request_review:
+    types: [submitted]
+  push:
+    branches: [main]
+
+jobs:
+  update-ticket-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract ticket ID
+        id: ticket
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            TICKET=$(echo "$COMMIT_MESSAGE" | grep -oP 'ENG-\d+' | head -1 || true)
+          else
+            TICKET=$(echo "$HEAD_REF" | grep -oP 'ENG-\d+' | head -1 || true)
+          fi
+          echo "id=$TICKET" >> "$GITHUB_OUTPUT"
+
+      - name: Determine target status
+        id: status
+        if: steps.ticket.outputs.id != ''
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+        run: |
+          STATUS=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            STATUS="in review"
+          elif [ "$EVENT_NAME" = "pull_request_review" ] && [ "$REVIEW_STATE" = "changes_requested" ]; then
+            STATUS="in progress"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            STATUS="in test"
+          fi
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+
+      - name: Update ClickUp ticket
+        if: steps.ticket.outputs.id != '' && steps.status.outputs.status != ''
+        env:
+          TICKET_ID: ${{ steps.ticket.outputs.id }}
+          TARGET_STATUS: ${{ steps.status.outputs.status }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
+          CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+        run: |
+          curl -sf -X PUT \
+            "https://api.clickup.com/api/v2/task/${TICKET_ID}?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}" \
+            -H "Authorization: ${CLICKUP_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\": \"${TARGET_STATUS}\"}"
+          echo "Updated ${TICKET_ID} to '${TARGET_STATUS}'"
+
+      - name: Link PR to ClickUp ticket
+        if: steps.ticket.outputs.id != '' && github.event_name == 'pull_request' && github.event.action == 'opened'
+        env:
+          TICKET_ID: ${{ steps.ticket.outputs.id }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
+          CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+        run: |
+          curl -sf -X POST \
+            "https://api.clickup.com/api/v2/task/${TICKET_ID}/comment?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}" \
+            -H "Authorization: ${CLICKUP_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"comment_text\": \"PR opened: ${PR_URL}\"}"
+          echo "Linked PR to ${TICKET_ID}"

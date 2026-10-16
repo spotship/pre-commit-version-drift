@@ -1,0 +1,66 @@
+name: Bug report
+description: A pin reported wrongly, a pin missed, or the hook failing outright.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The most useful report is
+        the smallest file content that reproduces it, plus the contents of the
+        source-of-truth file it was checked against.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of bug?
+      options:
+        - False positive: a correct pin was reported as drift
+        - Missed pin: a drifted pin was not reported
+        - Crash or error: the hook failed rather than reporting
+        - --fix produced something wrong
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: source-of-truth
+    attributes:
+      label: Source-of-truth file
+      description: Its path and its exact contents (`.python-version`, `.nvmrc`, the `packageManager` field, ...).
+      render: text
+      placeholder: |
+        .python-version:
+        3.12.13
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: The file content that reproduces it
+      description: The smallest file (with its path, which decides the globs that apply) that shows the problem.
+      render: text
+      placeholder: |
+        src/Dockerfile:
+        FROM public.ecr.aws/lambda/python:3.9
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: What it reported, and what it should have
+      description: Paste the hook's output verbatim, including the rule name in brackets.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The `rev:` from your .pre-commit-config.yaml, or the commit SHA.
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Your `.version-drift.toml` if you have one, the relevant ignore file, or anything else.
+    validations:
+      required: false

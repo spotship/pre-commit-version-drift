@@ -1,0 +1,8 @@
+# Code ownership for pre-commit-version-drift.
+# GitHub uses the last matching pattern. The single catch-all below
+# routes every change to the maintainers team for required review.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# NOTE: the `@spotship/maintainers` team must exist and have write
+# access to this repository for review routing to take effect.
+* @spotship/maintainers

@@ -1,0 +1,31 @@
+name: Question
+description: Ask a usage, design, licensing, or project-status question.
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking a question. Please include the context that
+        led to it so maintainers can give you a useful answer.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: Ask one focused question.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to do, or what decision are you trying to make?
+    validations:
+      required: true
+  - type: textarea
+    id: research
+    attributes:
+      label: What you checked
+      description: Links, docs, issues, or code you already reviewed.
+    validations:
+      required: false

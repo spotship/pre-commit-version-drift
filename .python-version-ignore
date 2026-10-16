@@ -14,3 +14,8 @@ tests/*
 # Scoped to this directory rather than all of src/, where a hardcoded version
 # would be a genuine bug.
 src/version_drift/toolchains/*
+
+# Issue templates carry example file content -- a drifted pin is the placeholder
+# showing a reporter what a good bug report looks like. Same category as the
+# test fixtures above: the version literal is the data, not a pin.
+.github/ISSUE_TEMPLATE/*

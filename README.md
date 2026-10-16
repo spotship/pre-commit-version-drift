@@ -29,7 +29,7 @@ Requires Python 3.11+ to run (it uses `tomllib`); it checks repos on any version
 ```yaml
 # .pre-commit-config.yaml
 repos:
-  - repo: https://github.com/jimbofreedman/pre-commit-version-drift
+  - repo: https://github.com/spotship/pre-commit-version-drift
     rev: v0.1.0
     hooks:
       - id: version-drift

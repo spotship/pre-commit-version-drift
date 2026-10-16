@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Fail if any pinned toolchain version disagrees with its source-of-truth file"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "Jimbo Freedman" }]
+authors = [{ name = "Spot Ship" }]
 keywords = ["pre-commit", "versions", "drift", "linter"]
 # tomllib, so 3.11 is a hard floor. This is the oldest version the package
 # supports, which is a different fact from the one it is developed on -- see
@@ -17,7 +17,9 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/jimbofreedman/pre-commit-version-drift"
+Homepage = "https://github.com/spotship/pre-commit-version-drift"
+Source = "https://github.com/spotship/pre-commit-version-drift"
+Issues = "https://github.com/spotship/pre-commit-version-drift/issues"
 
 [project.scripts]
 version-drift = "version_drift.cli:main"
