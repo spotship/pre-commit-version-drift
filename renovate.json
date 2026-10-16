@@ -3,7 +3,8 @@
   "extends": [
     "config:recommended",
     "docker:pinDigests",
-    "helpers:pinGitHubActionDigests"
+    "helpers:pinGitHubActionDigests",
+    ":enablePreCommit"
   ],
   "timezone": "UTC",
   "schedule": ["* * * * 5"],
@@ -57,6 +58,26 @@
       "description": "Major version cooldown: 30 days",
       "matchUpdateTypes": ["major"],
       "minimumReleaseAge": "30 days"
+    },
+    {
+      "description": "Python is pinned by .python-version, which is the source of truth every other Python pin in this repo is checked against - by this repo's own hook, in the hook job. Renovate reaches that file through its pyenv manager, whose datasource is the `python` Docker tag, which is why an unguarded bump arrives titled 'update python docker tag' on a docker branch. Disabled wholesale, re-enabled for pyenv alone below.",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["python", "docker.io/python", "public.ecr.aws/lambda/python"],
+      "enabled": false
+    },
+    {
+      "description": "...except .python-version itself. Must come after the rule above - later packageRules win, and written the other way round Renovate would never raise a Python bump at all. Held on 3.12 while the org is pinned to 3.12.13. Kept out of every other group on purpose: a Python bump is designed to fail the hook job until the pins that track it follow, and grouping it with routine updates would block them behind that failure.",
+      "matchManagers": ["pyenv"],
+      "enabled": true,
+      "groupName": "python runtime",
+      "allowedVersions": "<3.13"
+    },
+    {
+      "description": "ruff moves on both sides at once. pyproject.toml pins the package from PyPI and .pre-commit-config.yaml pins the hook from github-tags, which are different datasources and would otherwise be different PRs - and the ruff toolchain in this repo makes the rev the source of truth and checks the pin against it, so each PR would fail the hook job on its own. That is exactly what a pypi-only bump did here: ruff 0.15.6 -> 0.16.10 with the rev left behind, riding in the same group as an unrelated pytest bump and holding it up too.",
+      "matchPackageNames": ["ruff", "astral-sh/ruff-pre-commit"],
+      "groupName": "ruff",
+      "separateMajorMinor": false,
+      "separateMultipleMajor": false
     }
   ]
 }

@@ -31,8 +31,10 @@ repos:
   # code it is meant to gate. CI runs `pre-commit try-repo .` instead, which
   # builds the hook from HEAD.
 
-# sets up .pre-commit-ci.yaml to ensure pre-commit dependencies stay up to date
-ci:
-  autoupdate_schedule: weekly
-  skip: []
-  submodules: false
+# No `ci:` block here on purpose. That key configures pre-commit.ci, which is not
+# installed on this repo -- the app has opened no PR and pushed no commit in this
+# org at all, so `autoupdate_schedule: weekly` moved nothing and the revs above
+# were frozen at whatever a human last typed. Renovate's pre-commit manager owns
+# them now, and renovate.json groups the ruff rev with the ruff pin in
+# pyproject.toml so both sides of the invariant this repo's own hook enforces
+# move in one PR.
