@@ -73,6 +73,15 @@ routinely older than the pin.
 
 ## Versioning and release
 
-Conventional commits, semantic-release off `main`. This repo is consumed by
-`rev:` in other repos' `.pre-commit-config.yaml`, so a tag is a published
-interface: consumers pin it and `pre-commit autoupdate` moves them to it.
+Conventional commits, and **no release process at all**. The repo is
+deliberately untagged: consumers put `rev: ""` in their
+`.pre-commit-config.yaml` and `pre-commit autoupdate` resolves it to this
+branch's HEAD commit, so every merge to `main` is the release.
+
+That means there is no semver to signal a breaking change, and it means **main
+is always what consumers get next**. A commit that makes an existing repo newly
+fail must say so in its message; that log is the only changelog they have.
+
+Tags remain additive if this ever needs versioning -- `get_best_candidate_tag`
+prefers a tag containing a dot, so adding `v1.0.0` later works without consumers
+changing anything.

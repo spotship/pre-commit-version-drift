@@ -4,7 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pre-commit-version-drift"
-version = "0.1.0"
+# Deliberately 0.0.0: this repo is untagged, so nothing produces or consumes a
+# version. Consumers pin a commit SHA via `pre-commit autoupdate`, and
+# pre-commit installs from a depth-1 detached checkout with no tags fetched --
+# so even setuptools-scm could not derive one. A literal here would be a pin
+# whose source of truth nothing checks, which is what this tool is for.
+version = "0.0.0"
 description = "Fail if any pinned toolchain version disagrees with its source-of-truth file"
 readme = "README.md"
 license = { text = "MIT" }

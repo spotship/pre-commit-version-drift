@@ -6,9 +6,15 @@ that cries wolf gets `--no-verify`'d and then catches nothing at all.
 
 ## Project status
 
-Pre-release. No tag has been published, so consumers cannot pin a `rev:` yet.
-The engine's TOML contract (forms, rules, globs, `field`, `source_field`) may
-still change.
+Pre-release, and **deliberately untagged**. Consumers pin a commit SHA via
+`pre-commit autoupdate`, and re-running it is how they move forward — see
+**Install** in the README. The engine's TOML contract (forms, rules, globs,
+`field`, `source_field`) may still change.
+
+Because there is no semver, a new rule reaches a consumer as "my unrelated
+commit now fails pre-commit". That is the cost of this choice and it is on us to
+soften: anything that makes an existing repo newly fail should say so plainly in
+its commit message.
 
 ## Code of Conduct
 
@@ -28,8 +34,10 @@ type: short imperative summary
 Allowed types: `feat`, `fix`, `perf`, `refactor`, `style`, `test`, `ci`, `docs`,
 `revert`, `build`, `chore`.
 
-Releases are cut by semantic-release from these, so the type decides the version
-bump. Spot Ship internal contributors should also prefix the summary with the
+There is no automated release, so the type does not drive a version bump — it is
+there so the history reads consistently and so a consumer can tell from the log
+what changed between the SHA they had and the one they are moving to. Spot Ship
+internal contributors should also prefix the summary with the
 ClickUp ticket id (`feat(node): ENG-1234 add the pnpm toolchain`); external
 contributors are not expected to include one.
 
