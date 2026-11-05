@@ -9,7 +9,7 @@
   "timezone": "UTC",
   "schedule": ["* * * * 5"],
   "dependencyDashboard": true,
-  "baseBranches": ["main"],
+  "baseBranchPatterns": ["main"],
   "rangeStrategy": "bump",
   "vulnerabilityAlerts": {
     "enabled": true,
@@ -63,6 +63,13 @@
       "description": "Python is pinned by .python-version, which is the source of truth every other Python pin in this repo is checked against - by this repo's own hook, in the hook job. Renovate reaches that file through its pyenv manager, whose datasource is the `python` Docker tag, which is why an unguarded bump arrives titled 'update python docker tag' on a docker branch. Disabled wholesale, re-enabled for pyenv alone below.",
       "matchDatasources": ["docker"],
       "matchDepNames": ["python", "docker.io/python", "public.ecr.aws/lambda/python"],
+      "enabled": false
+    },
+    {
+      "description": "The setup-python inputs are a third surface, and the one that defeated the escape hatch. The github-actions manager extracts each workflow's `python-version` as actions/python-versions on the github-releases datasource, which neither the docker rule above nor the hook can see -- an inline `python-version-ok` silences the hook by design, so a Renovate bump to an escaped line lands unopposed and unreviewed. That is how install-floor's 3.11 became 3.15.1 in #5 and stopped testing the floor it exists for. Majors and minors only: a patch within the pinned minor is still correct.",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["actions/python-versions"],
+      "matchUpdateTypes": ["major", "minor"],
       "enabled": false
     },
     {

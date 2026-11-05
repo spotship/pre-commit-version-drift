@@ -142,7 +142,7 @@ jobs:
           # Deliberately the floor from pyproject.toml, not .python-version --
           # that is the whole point of this job, hence the escape rather than a
           # bump. tomllib is what puts the floor at 3.11.
-          python-version: '3.15.1'  # python-version-ok: guards the requires-python floor
+          python-version: '3.11'  # python-version-ok: guards the requires-python floor
       - run: python -m pip install --upgrade pip
       - run: python -m pip install .
       - name: The console script must land on the environment's PATH
