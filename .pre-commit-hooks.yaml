@@ -1,7 +1,7 @@
 # Adopt with:
 #
 #   - repo: https://github.com/spotship/pre-commit-version-drift
-#     rev: v0.1.0
+#     rev: v0.2.0
 #     hooks:
 #       - id: version-drift
 #

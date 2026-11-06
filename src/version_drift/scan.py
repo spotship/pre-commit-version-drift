@@ -15,6 +15,25 @@ from .model import Rule, Toolchain, declared_version, parse_version
 # needs more than a handful of passes over one line; this only bounds a bug.
 MAX_FIX_PASSES = 100
 
+# An OCI content digest written beside a tag: the `@sha256:<hex>` in
+# `python:3.12.13-slim@sha256:...`.
+#
+# This lives in the engine rather than in a toolchain's TOML because it is not a
+# fact about any one language. A digest sits beside a node tag or a Go image as
+# readily as a Python one, and the hazard is identical wherever it appears: a
+# container runtime resolves `tag@digest` by the *digest*, so rewriting the tag
+# alone leaves the file naming one version while the build pulls another -- and
+# the re-check then passes, because the tag it reads is now correct. The
+# co-located-tag hazard `--fix` already warns about (`-alpine3.20`) is loud: the
+# tag does not exist and the build stops. This one is silent and succeeds, which
+# is why it is refused rather than warned about.
+#
+# The algorithm is open-ended in the OCI spec, so this matches any
+# `@<algorithm>:<hex>` rather than sha256 alone. Matching too much is the safe
+# direction: a false positive refuses a rewrite somebody can still make by hand,
+# while a false negative is the silent strand this exists to stop.
+DIGEST_RE = re.compile(r"@[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z0-9]+)*:[0-9a-fA-F]{32,}")
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -27,6 +46,14 @@ class Finding:
     source: str
     declared: str
     floor: bool = False
+    # The pin sits beside a content digest, so `--fix` declined to rewrite it.
+    #
+    # Per *match*, not per rule. `Rule.fixable` already says "--fix may never
+    # rewrite this pin" and is the right home for ruff's and djLint's revs, where
+    # the answer is the same on every line. This is the opposite shape: the same
+    # rule rewrites a bare tag on one line and must refuse the digest-pinned one
+    # below it, so the decision cannot be carried on the rule.
+    digest_pinned: bool = False
 
     def render(self) -> str:
         if self.floor:
@@ -40,7 +67,15 @@ class Finding:
                 f"{self.path}:{self.lineno}: [{self.rule}] found {self.found!r}, "
                 f"expected {self.expected} (from {self.source} = {self.declared})"
             )
-        return f"{head}\n    {self.line.strip()}"
+        out = f"{head}\n    {self.line.strip()}"
+        if self.digest_pinned:
+            out += (
+                "\n    Pinned to a digest, so --fix will not rewrite it: a container "
+                "runtime resolves\n    `tag@sha256:` by the digest, so moving the tag "
+                "alone would leave this file\n    naming one version while the build "
+                "pulls another. Update the tag and the digest\n    together."
+            )
+        return out
 
 
 @dataclass
@@ -267,13 +302,34 @@ def is_acceptable(rule: Rule, found: str, toolchain: Toolchain, forms: dict[str,
     return ".".join(found.split(".")[:components]) == value
 
 
-def _first_bad(
+def pinned_to_digest(line: str, match: re.Match[str]) -> bool:
+    """Whether the version this match captured belongs to a digest-pinned reference.
+
+    Scoped to the whitespace-delimited token the match sits in, never the whole
+    line. `FROM python:3.11.9 AS build  # mirrored from base@sha256:...` carries
+    a digest that has nothing to do with the pin, and refusing that rewrite would
+    turn an unrelated comment into a permanent hand-edit.
+    """
+    tail = re.split(r"\s", line[match.end(1) :], maxsplit=1)[0]
+    return DIGEST_RE.search(tail) is not None
+
+
+def _fixable_matches(
     rule: Rule, line: str, toolchain: Toolchain, forms: dict[str, str]
-) -> re.Match[str] | None:
-    for match in rule.pattern.finditer(line):
-        if not is_acceptable(rule, match.group(1), toolchain, forms):
-            return match
-    return None
+) -> list[re.Match[str]]:
+    """The drifted matches on this line that --fix may rewrite.
+
+    A digest-pinned one is left out rather than reported here. Dropping it from
+    the rewrite set is all this has to do: the reporting pass sweeps whatever the
+    fix loop leaves behind, so a refusal stays unresolved drift and the run still
+    fails.
+    """
+    return [
+        match
+        for match in rule.pattern.finditer(line)
+        if not is_acceptable(rule, match.group(1), toolchain, forms)
+        and not pinned_to_digest(line, match)
+    ]
 
 
 def _scan_fields(
@@ -397,18 +453,27 @@ def scan(root: Path, toolchain: Toolchain, declared: str, fix: bool = False) -> 
             for rule in applicable:
                 if fix and can_fix(rule, forms):
                     for _ in range(MAX_FIX_PASSES):
-                        match = _first_bad(rule, lines[index], toolchain, forms)
-                        if match is None:
+                        bad = _fixable_matches(rule, lines[index], toolchain, forms)
+                        if not bad:
                             break
-                        start, end = match.span(1)
                         line = lines[index]
-                        lines[index] = line[:start] + forms[rule.form] + line[end:]
+                        # Right to left, because rewriting one span shifts every
+                        # span after it -- and the whole line is settled in one
+                        # pass so that a refused match keeps its place among the
+                        # ones that moved.
+                        for match in reversed(bad):
+                            start, end = match.span(1)
+                            line = line[:start] + forms[rule.form] + line[end:]
+                        lines[index] = line
                         changed = True
-                    continue
+                    # Deliberately no `continue`. Anything still drifted on this
+                    # line is what --fix declined to rewrite, and the pass below
+                    # is what says so: a refusal is unresolved drift, not a pass.
 
-                # Reached under --fix too, for a rule --fix cannot touch: a
-                # floor, or one whose form the source file cannot fill. Reporting
-                # is the only honest option left for those.
+                # Reached under --fix too, for a rule --fix cannot touch -- a
+                # floor, or one whose form the source file cannot fill -- and for
+                # a match it declined to rewrite. Reporting is the only honest
+                # option left for those.
                 for match in rule.pattern.finditer(lines[index]):
                     found = match.group(1)
                     if is_acceptable(rule, found, toolchain, forms):
@@ -427,6 +492,9 @@ def scan(root: Path, toolchain: Toolchain, declared: str, fix: bool = False) -> 
                             source=toolchain.source_file,
                             declared=declared,
                             floor=rule.floor,
+                            digest_pinned=(
+                                can_fix(rule, forms) and pinned_to_digest(lines[index], match)
+                            ),
                         )
                     )
 

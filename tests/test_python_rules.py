@@ -333,6 +333,61 @@ def test_fix_on_a_clean_repo_changes_nothing(make_repo, run_cli):
     assert result.out == ""
 
 
+def test_fix_refuses_a_patch_tag_pinned_to_a_digest(make_repo, run_cli):
+    """The shape a consumer actually writes: docker.io/python at patch precision
+    with an OS suffix and a digest, driven through a patch bump."""
+    line = (
+        "FROM docker.io/python:3.12.13-slim-bookworm@sha256:"
+        "1111111111111111111111111111111111111111111111111111111111111111\n"
+    )
+    repo = make_repo({"Dockerfile": line}, version="3.12.15")
+    result = run_cli(repo, "--fix")
+    assert result.code == 1
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == line, (
+        "the tag must not move while the digest stays behind"
+    )
+    assert (
+        "Dockerfile:1: [docker-image-patch] found '3.12.13', expected 3.12.15 "
+        "(from .python-version = 3.12.15)" in result.err
+    )
+    assert "Pinned to a digest" in result.err
+    assert "Update the tag and the digest" in result.err
+    # And the re-check still fails: the drift is unresolved, not forgiven.
+    assert run_cli(repo).code == 1
+
+
+def test_fix_refuses_a_minor_tag_pinned_to_a_digest(make_repo, run_cli):
+    """The Lambda base image. Its tag is a minor, so only a minor bump can strand
+    it -- which is the move every digest-pinned mavis Dockerfile has ahead of
+    it."""
+    line = (
+        "FROM public.ecr.aws/lambda/python:3.12@sha256:"
+        "3856536f53e945debf4c90d0ff301cbaa837c07a4ab9b0e2c102c6e54ceb9762\n"
+    )
+    repo = make_repo({"Dockerfile": line}, version="3.13.0")
+    result = run_cli(repo, "--fix")
+    assert result.code == 1
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == line
+    assert "Dockerfile:1: [docker-image-minor] found '3.12', expected 3.13" in result.err
+    assert "Pinned to a digest" in result.err
+    assert run_cli(repo).code == 1
+
+
+def test_fix_refuses_a_minor_tag_with_an_os_suffix_before_the_digest(make_repo, run_cli):
+    """The third shape in the same consumer: a minor tag, an OS suffix and a
+    digest on a bare docker.io reference."""
+    line = (
+        "FROM python:3.12-slim@sha256:"
+        "a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1\n"
+    )
+    repo = make_repo({"Dockerfile": line}, version="3.13.0")
+    result = run_cli(repo, "--fix")
+    assert result.code == 1
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == line
+    assert "Dockerfile:1: [docker-image-minor] found '3.12', expected 3.13" in result.err
+    assert "Pinned to a digest" in result.err
+
+
 # --------------------------------------------------------------------------
 # What .python-version actually contains.
 #

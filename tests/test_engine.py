@@ -439,6 +439,114 @@ def test_fix_leaves_an_escaped_line_untouched(make_repo, run_cli):
 
 
 # --------------------------------------------------------------------------
+# Digest-pinned references
+#
+# Driven through the inline node toolchain on purpose. The guard is not a fact
+# about Python: a `node:20@sha256:...` strands exactly as a python tag does, so
+# testing it against the toolchain this package has never heard of is what says
+# the guard lives in the engine rather than in python.toml.
+# --------------------------------------------------------------------------
+
+DIGEST = "sha256:" + "ab" * 32
+OTHER_DIGEST = "sha256:" + "cd" * 32
+
+
+def test_fix_refuses_to_rewrite_a_tag_beside_a_digest(make_repo, run_cli):
+    """Once a digest is present the tag is advisory, so rewriting the tag alone
+    would leave the file naming 22 while the build still pulled 20 -- and the
+    re-check would pass, because the tag it reads is now correct."""
+    repo = make_repo(
+        {
+            ".version-drift.toml": NODE_TOOLCHAIN,
+            ".nvmrc": "22.22.0\n",
+            "Dockerfile": f"FROM node:20@{DIGEST}\n",
+        }
+    )
+    result = run_cli(repo, "--toolchain", "node", "--fix")
+    assert result.code == 1, "a refusal is unresolved drift, not a pass"
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == f"FROM node:20@{DIGEST}\n"
+    assert "Rewrote version pins" not in result.out
+    assert "Dockerfile:1: [docker-image] found '20', expected 22" in result.err
+    assert "Pinned to a digest" in result.err
+    assert "Update the tag and the digest" in result.err
+
+
+def test_a_digest_on_a_pin_that_agrees_is_silent(make_repo, run_cli):
+    """Only a line --fix would otherwise have rewritten is refused. A digest
+    beside a pin that already agrees is a supply-chain pin doing its job, and the
+    hook has nothing to say about it in either mode."""
+    repo = make_repo(
+        {
+            ".version-drift.toml": NODE_TOOLCHAIN,
+            ".nvmrc": "22.22.0\n",
+            "Dockerfile": f"FROM node:22@{DIGEST}\n",
+        }
+    )
+    assert run_cli(repo, "--toolchain", "node").code == 0
+    result = run_cli(repo, "--toolchain", "node", "--fix")
+    assert result.code == 0
+    assert result.out == ""
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == f"FROM node:22@{DIGEST}\n"
+
+
+def test_a_digest_elsewhere_on_the_line_does_not_block_the_fix(make_repo, run_cli):
+    """Scoped to the reference the pin belongs to, not to the line. A digest in a
+    trailing comment names some other image and says nothing about this tag;
+    refusing on it would turn a comment into a permanent hand-edit."""
+    repo = make_repo(
+        {
+            ".version-drift.toml": NODE_TOOLCHAIN,
+            ".nvmrc": "22.22.0\n",
+            "Dockerfile": f"FROM node:20 AS build  # mirrored from base@{OTHER_DIGEST}\n",
+        }
+    )
+    assert run_cli(repo, "--toolchain", "node", "--fix").code == 1
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == (
+        f"FROM node:22 AS build  # mirrored from base@{OTHER_DIGEST}\n"
+    )
+
+
+def test_the_refusal_is_per_match_not_per_line(make_repo, run_cli):
+    """Two references on one line, one pinned to a digest and one not. The
+    rewrite of the second must not shift the first out from under its refusal,
+    and the refusal must not stand the second down."""
+    repo = make_repo(
+        {
+            ".version-drift.toml": NODE_TOOLCHAIN,
+            ".nvmrc": "22.22.0\n",
+            "Dockerfile": f"FROM node:20@{DIGEST}  # replaces node:20\n",
+        }
+    )
+    result = run_cli(repo, "--toolchain", "node", "--fix")
+    assert result.code == 1
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == (
+        f"FROM node:20@{DIGEST}  # replaces node:22\n"
+    )
+    assert "Dockerfile:1: [docker-image] found '20', expected 22" in result.err
+
+
+def test_fix_rewrites_what_it_can_while_refusing_the_digest_line(make_repo, run_cli):
+    """A refusal must not stand the rest of the file down, and a successful
+    rewrite must not swallow the refusal -- the same shape as a bad floor sitting
+    beside a fixable pin."""
+    repo = make_repo(
+        {
+            ".version-drift.toml": NODE_TOOLCHAIN,
+            ".nvmrc": "22.22.0\n",
+            "Dockerfile": f"FROM node:20@{DIGEST} AS base\nFROM node:20 AS run\n",
+        }
+    )
+    result = run_cli(repo, "--toolchain", "node", "--fix")
+    assert result.code == 1
+    assert "Rewrote version pins in 1 file(s)" in result.out
+    assert (repo / "Dockerfile").read_text(encoding="utf-8") == (
+        f"FROM node:20@{DIGEST} AS base\nFROM node:22 AS run\n"
+    )
+    assert "Dockerfile:1: [docker-image] found '20', expected 22" in result.err
+    assert "Dockerfile:2:" not in result.err
+
+
+# --------------------------------------------------------------------------
 # CLI contract
 # --------------------------------------------------------------------------
 

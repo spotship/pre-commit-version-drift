@@ -11,7 +11,7 @@ name = "pre-commit-version-drift"
 #
 # Not setuptools-scm: pre-commit installs from a depth-1 detached checkout with
 # no tags fetched, so there is no tag to derive a version from at build time.
-version = "0.1.0"
+version = "0.2.0"
 description = "Fail if any pinned toolchain version disagrees with its source-of-truth file"
 readme = "README.md"
 license = { text = "MIT" }
