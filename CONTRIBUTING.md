@@ -84,7 +84,10 @@ For a rule, the PR should say:
   supported, which is a different fact from the one the repo runs on, and only a
   floor *above* the pin is wrong.
 - **What `--fix` would do to it.** If rewriting it could produce something
-  valid-looking but wrong, it should not be fixable.
+  valid-looking but wrong, it should not be fixable. `fixable = false` is a
+  rule-wide answer, so reach for it only when the answer is the same on every
+  line; a hazard that depends on what is written beside the pin belongs in the
+  engine, as the refusal to rewrite a tag pinned to a content digest does.
 
 Tests drive the real CLI against a throwaway git repo — see `tests/conftest.py`.
 Please include both a case that fires and a case that must stay silent.

@@ -30,7 +30,7 @@ Requires Python 3.11+ to run (it uses `tomllib`); it checks repos on any version
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/spotship/pre-commit-version-drift
-    rev: v0.1.0
+    rev: v0.2.0
     hooks:
       - id: version-drift
 ```
@@ -178,14 +178,23 @@ docs/plans/*
 pre-commit run --hook-stage manual version-drift-fix --all-files
 ```
 
-**Review the diff.** It rewrites the matched version and nothing else on the
-line, which can produce something valid-looking but wrong. The re-check passes in
-every case below, because the version component *is* correct afterwards:
+**A pin written beside a content digest is refused, not rewritten.** A line
+like `python:3.9@sha256:ed42…` is reported as drift and left exactly as it was
+written. When both are present the digest wins, so moving the tag on its own
+would leave the file naming one version while the build pulled another — and the
+re-check would pass over it, because the tag it reads is now correct. Update the
+tag and the digest together, or put `python-version-ok` on the line.
 
-- **A digest-pinned image becomes a lie, silently.** `python:3.9@sha256:ed42…`
-  becomes `python:3.12@sha256:ed42…`. The tag moves, the digest doesn't, and when
-  both are present the digest wins — so the file claims 3.12 while the build
-  still pulls 3.9. Bump the digest by hand, or use `python-version-ok`.
+The refusal is per *match*, not per rule or per file: a bare tag on the next line
+is still rewritten, and a digest beside a pin that already agrees is never
+mentioned at all. A run that refuses still exits non-zero — the drift is
+unresolved, not forgiven.
+
+**Review the diff.** What it does rewrite is the matched version and nothing else
+on the line, which can produce something valid-looking but wrong. The re-check
+passes in every case below, because the version component *is* correct
+afterwards:
+
 - **A co-located OS tag is left behind.** `python:3.12.10-alpine3.20` becomes
   `python:3.12.13-alpine3.20`, which isn't a real tag. This one at least fails
   the build loudly, and the tool warns about it.
@@ -341,8 +350,12 @@ pattern with two groups, a floor on an undotted form.
 Deliberately conservative: zero false positives matters more than total coverage,
 because a hook that cries wolf gets `--no-verify`'d. It does **not** catch:
 
-- Digests. `python:3.12@sha256:…` is checked on the tag only; the digest can point
-  anywhere.
+- Digests, as a *check*. `python:3.12@sha256:…` is read on its tag only, so a
+  digest that disagrees with a tag the hook accepts is invisible: resolving one
+  would put a network call inside a pre-commit hook. `--fix` refuses to rewrite
+  such a line rather than stranding the digest beside a moved tag, but that is a
+  guard on the autofix, not coverage of the pin — and the guard reads a literal
+  digest, so one held in a build arg (`python:3.12@${PY_DIGEST}`) is not seen.
 - JSON, except the `package.json` fields named above. Those are addressed by
   path; nothing scans JSON generally, so `.devcontainer/devcontainer.json` and a
   notebook's `kernelspec` are not read.

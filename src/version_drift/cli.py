@@ -36,7 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="rewrite drifted versions in place. Only the version itself is "
         "rewritten -- a co-located tag (e.g. the '-alpine3.20' in "
         "'python:3.12.10-alpine3.20') is left alone and may still need a "
-        "manual bump to name something that exists.",
+        "manual bump to name something that exists. A pin written beside a "
+        "content digest is refused outright and reported instead: the digest, "
+        "not the tag, is what a build pulls.",
     )
     parser.add_argument(
         "--list-toolchains", action="store_true", help="print known toolchains and exit"
@@ -184,7 +186,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {rel}")
             print(
                 "\nReview the diff -- a co-located tag (e.g. '-alpine3.20') is not "
-                "rewritten and may now name something that does not exist."
+                "rewritten and may now name something that does not exist. That is "
+                "the loud failure, and it is the one left to the reader: a pin "
+                "written beside a content digest is not rewritten at all, because "
+                "the digest would go on naming the old image, and is reported as "
+                "drift for a hand fix instead."
             )
 
         # Not elif: --fix leaves floors alone, so one run can both rewrite pins

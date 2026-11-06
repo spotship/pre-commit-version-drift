@@ -70,6 +70,10 @@ routinely older than the pin.
   suppresses nothing.
 - **Structured fields have no inline escape**, JSON having no comments; the only
   way out is the ignore file.
+- **`--fix` refuses a pin written beside a content digest**, and refuses it per
+  *match* rather than per rule: the same rule rewrites a bare tag on one line and
+  declines the digest-pinned one below it. `Rule.fixable` is the rule-wide form
+  of the same idea -- right for ruff's and djLint's revs, wrong for this.
 
 ## Versioning and release
 
