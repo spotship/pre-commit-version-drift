@@ -7,17 +7,15 @@
     "",
     "`:semanticCommitTypeAll(chore)` MUST STAY AFTER config:recommended, which",
     "pulls in :semanticPrefixFixDepsChoreOthers and types the production depType",
-    "groups as `fix`. Listed before it, that wins and PR titles stay",
-    "`fix(deps)`. Both entries are Renovate built-ins, which is why they resolve",
-    "in a public repo when the org preset does not.",
+    "groups as `fix`. Listed before it, that wins and PR titles stay `fix(deps)`.",
+    "Every entry below is a Renovate built-in, which is why they resolve in a",
+    "public repo when the org preset does not.",
     "",
-    "NO baseBranchPatterns HERE, deliberately. Renovate processes the default",
-    "branch when the key is absent, and main is this repo's default branch, so",
-    "naming it did nothing. Naming it is not free either: the list is resolved",
-    "against the live branches and a name that no longer exists is skipped with",
-    "a log line and nothing else, so a rename would stop Renovate here with no",
-    "issue and no dashboard entry. Add it only for a branch that is not the",
-    "default, or for more than one."
+    "No baseBranchPatterns: Renovate processes the default branch when the key",
+    "is absent, and a name in it that no longer exists is skipped with a log",
+    "line and nothing else, so a rename would stop Renovate here with no issue",
+    "and no dashboard entry. Set it only for a branch that is not the default,",
+    "or for more than one."
   ],
   "extends": [
     "config:recommended",
@@ -47,7 +45,7 @@
       "pinDigests": false
     },
     {
-      "description": "requires-python is the oldest interpreter a CONSUMER can install this on, not the one it is developed on. pre-commit builds a hook venv from whatever interpreter pre-commit itself runs on, which in repos with no default_language_version is routinely older than .python-version -- so raising this floor makes `pip install` fail for them with 'requires a different Python'. It is held at the tomllib floor by hand and guarded by the install-floor job in ci.yaml",
+      "description": "requires-python is the oldest interpreter a CONSUMER can install this on, not the one it is developed on. pre-commit builds a hook venv from whatever interpreter pre-commit itself runs on, which in repos with no default_language_version is routinely older than .python-version, so raising this floor makes `pip install` fail for them. Held at the tomllib floor by hand, guarded by the install-floor job in ci.yaml.",
       "matchDepTypes": ["requires-python"],
       "enabled": false
     },
@@ -79,27 +77,27 @@
       "minimumReleaseAge": "30 days"
     },
     {
-      "description": "Python is pinned by .python-version, which is the source of truth every other Python pin in this repo is checked against - by this repo's own hook, in the hook job. Renovate reaches that file through its pyenv manager, whose datasource is the `python` Docker tag, which is why an unguarded bump arrives titled 'update python docker tag' on a docker branch. Disabled wholesale, re-enabled for pyenv alone below.",
+      "description": "Python is pinned by .python-version, the source of truth every other Python pin here is checked against by this repo's own hook. Renovate reaches that file through its pyenv manager, whose datasource is the `python` Docker tag, which is why an unguarded bump arrives titled 'update python docker tag' on a docker branch. Disabled wholesale, re-enabled for pyenv alone below.",
       "matchDatasources": ["docker"],
       "matchDepNames": ["python", "docker.io/python", "public.ecr.aws/lambda/python"],
       "enabled": false
     },
     {
-      "description": "The setup-python inputs are a third surface, and the one that defeated the escape hatch. The github-actions manager extracts each workflow's `python-version` as actions/python-versions on the github-releases datasource, which neither the docker rule above nor the hook can see -- an inline `python-version-ok` silences the hook by design, so a Renovate bump to an escaped line lands unopposed and unreviewed. That is how install-floor's 3.11 became 3.15.1 in #5 and stopped testing the floor it exists for. Majors and minors only: a patch within the pinned minor is still correct.",
+      "description": "The setup-python inputs are a third surface, and the one the hook cannot see: the github-actions manager extracts each workflow's `python-version` as actions/python-versions on the github-releases datasource, and an inline `python-version-ok` silences the hook by design, so a bump to an escaped line lands unopposed. That is how install-floor's 3.11 became 3.15.1 and stopped testing the floor it exists for. Majors and minors only -- a patch within the pinned minor is still correct.",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["actions/python-versions"],
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false
     },
     {
-      "description": "...except .python-version itself. Must come after the rule above - later packageRules win, and written the other way round Renovate would never raise a Python bump at all. Held on 3.12 while the org is pinned to 3.12.13. Kept out of every other group on purpose: a Python bump is designed to fail the hook job until the pins that track it follow, and grouping it with routine updates would block them behind that failure.",
+      "description": "...except .python-version itself. Must come after the rule above: later packageRules win, and written the other way round Renovate would never raise a Python bump at all. Held on 3.12. Kept out of every other group on purpose -- a Python bump is designed to fail the hook job until the pins that track it follow, and grouping it with routine updates would block them behind that failure.",
       "matchManagers": ["pyenv"],
       "enabled": true,
       "groupName": "python runtime",
       "allowedVersions": "<3.13"
     },
     {
-      "description": "ruff moves on both sides at once. pyproject.toml pins the package from PyPI and .pre-commit-config.yaml pins the hook from github-tags, which are different datasources and would otherwise be different PRs - and the ruff toolchain in this repo makes the rev the source of truth and checks the pin against it, so each PR would fail the hook job on its own. That is exactly what a pypi-only bump did here: ruff 0.15.6 -> 0.16.10 with the rev left behind, riding in the same group as an unrelated pytest bump and holding it up too.",
+      "description": "ruff moves on both sides at once: pyproject.toml pins the package from PyPI and .pre-commit-config.yaml pins the hook from github-tags, which are different datasources and would otherwise be different PRs. The ruff toolchain here makes the rev the source of truth and checks the pin against it, so each PR would fail the hook job on its own.",
       "matchPackageNames": ["ruff", "astral-sh/ruff-pre-commit"],
       "groupName": "ruff",
       "separateMajorMinor": false,
