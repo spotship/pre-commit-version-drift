@@ -4,7 +4,8 @@
     "config:recommended",
     "docker:pinDigests",
     "helpers:pinGitHubActionDigests",
-    ":enablePreCommit"
+    ":enablePreCommit",
+    ":semanticCommitTypeAll(chore)"
   ],
   "timezone": "UTC",
   "schedule": ["* * * * 5"],
