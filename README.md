@@ -4,10 +4,10 @@ One file says what version your toolchain runs on. Everything else has to agree.
 
 A repo names its Python version in a dozen places — base images, CI matrices,
 Lambda runtimes, `requires-python`, ruff's `target-version`, the first line of
-CLAUDE.md. Bumps update most of them. The ones they miss don't fail: the build
-keeps working on the old version, CI keeps testing something else, and the
-README keeps telling new joiners the wrong thing until somebody trips over it
-months later.
+CLAUDE.md or AGENTS.md. Bumps update most of them. The ones they miss don't
+fail: the build keeps working on the old version, CI keeps testing something
+else, and the README keeps telling new joiners the wrong thing until somebody
+trips over it months later.
 
 This hook makes `.python-version` the single source of truth and fails the
 commit when anything disagrees.
@@ -100,24 +100,21 @@ Three forms are derived from `.python-version`:
 | minor | `3.12` | registries publishing only minor tags, interpreter names, runtimes |
 | nodot | `312` | `py312`, `python312` tokens |
 
-| Rule | Matches | Form | Files |
-|------|---------|------|-------|
-| `docker-image-patch` | `python:3.12.13` | patch | Dockerfiles, YAML |
-| `docker-image-minor` | `python:3.12` | minor | Dockerfiles, YAML |
-| `dockerfile-arg` | `ARG PYTHON_VERSION=3.12.13` | patch (minor ok) | Dockerfiles |
-| `sam-build-image` | `build-python3.12` | minor | config |
-| `interpreter-or-runtime` | `python3.12` | minor | config, docs |
-| `setup-python` | `python-version: "3.12.13"` | patch (minor ok) | YAML |
-| `readthedocs-python` | `python: "3.12"` | minor (patch ok) | YAML |
-| `requires-python` | `requires-python = ">=3.9"` | floor | `*.toml`, `uv.lock` |
-| `python-version-key` | mypy / Pipfile `python_version` | minor (patch ok) | `*.toml`, `*.cfg`, `*.ini`, `Pipfile` |
-| `tool-versions` | asdf/mise `python 3.12.13` | patch | `.tool-versions` |
-| `runtime-txt` | `python-3.12.13` | patch | `runtime.txt` |
-| `conda-python` | `- python=3.12` | minor (patch ok) | `environment.yml` |
-| `py-nodot` | `py312` — ruff, tox, SageMaker | nodot | config, `*.py` |
-| `python-nodot` | `python312` — GCP runtimes | nodot | config, `*.py` |
-| `prose-version` | `Python 3.12` in prose | minor (patch ok) | `*.md` |
-| `prose-version-floor` | `Python 3.12+` | floor | `*.md` |
+17 rules match those forms against Dockerfiles, CI config, `pyproject.toml`,
+`.tool-versions`, `runtime.txt`, `environment.yml`, prose in `*.md`, and more —
+a few examples:
+
+```
+FROM python:3.12.13-slim          # docker-image-patch (Dockerfiles, YAML)
+python-version: "3.12.13"         # setup-python (YAML)
+requires-python = ">=3.9"         # requires-python -- a floor, not a pin
+This service runs on Python 3.12. # prose-version (*.md)
+```
+
+The complete, current list — every rule's pattern, form and files — is defined
+in `src/version_drift/toolchains/python.toml`, or printed by
+`version-drift --list-toolchains`; this README doesn't keep a second copy of it
+to go stale against.
 
 "config" is `*Dockerfile`, `*.dockerfile`, `*.yml`, `*.yaml`, `*.toml`, `*.cfg`,
 `*.ini`, `*.tf`, `*.hcl`, `*.sh`, `Pipfile`, `.tool-versions`. Only
@@ -221,20 +218,20 @@ pnpm has no version file at all — there is no `.pnpm-version` convention. Its 
 is the Corepack `packageManager` field, which pnpm also reads natively, so
 getting it wrong changes which package manager runs.
 
-| Rule | Reads |
-|------|-------|
-| `node-image-patch` / `node-image-major` | `node:22.23.1`, `node:22-alpine` |
-| `lambda-runtime` | `runtime: nodejs22.x` |
-| `gcp-runtime` | `runtime = "nodejs22"` (Terraform) |
-| `setup-node` | `node-version: '22.23.1'` |
-| `node-version-input` | `node_version: "22.x"` |
-| `engines-node` | `"engines": {"node": ">=22 <23"}` |
-| `types-node-dev` / `types-node-prod` | `"@types/node": "^22.20.1"` |
-| `prose-node` | `Node.js 22` in `*.md` |
-| `pnpm-spec` | `pnpm@9.15.9` |
-| `pnpm-version-input` | `pnpm_version: "9"` |
-| `engines-pnpm` | `"engines": {"pnpm": "^9.15.9"}` |
-| `package-manager-field` | `packageManager` in a *workspace* package.json |
+10 node rules and 4 pnpm rules match the same way, against Dockerfiles, Lambda
+and Terraform runtimes, CI config, prose, and the structured `package.json`
+fields below — a few examples:
+
+```
+FROM node:22.23.1-alpine                       # node-image-patch
+runtime: nodejs22.x                            # lambda-runtime
+"engines": {"node": ">=22 <23"}                # engines-node (parsed, not matched)
+packageManager: "pnpm@9.15.9"                  # package-manager-field
+```
+
+As with Python, the complete list for either toolchain is in
+`src/version_drift/toolchains/node.toml` / `pnpm.toml`, or
+`version-drift --list-toolchains`.
 
 Prefer `node-version-file: .nvmrc`, which is never flagged.
 
@@ -377,6 +374,10 @@ pip install -e '.[dev]'
 pytest
 pre-commit try-repo . version-drift --all-files
 ```
+
+Contributing a rule or cutting a release: CONTRIBUTING.md. This is a pre-commit
+hook with no network calls and no credentials read; its threat model and how to
+report a vulnerability are in SECURITY.md.
 
 ## Licence
 

@@ -1,40 +1,109 @@
-# pre-commit-version-drift
+# AGENTS.md
 
-A pre-commit hook that fails the commit when any pinned toolchain version in a
-repo disagrees with that toolchain's source-of-truth file. Published for other
-repos to consume, so the hook's *packaged* behaviour is the product — not just
-the library behind it.
+For what this repo is and how to install and run it, read README.md, not this
+file. This file holds only what README.md doesn't say, or what's easy to get
+wrong anyway.
 
 ## Layout
 
 ```
 src/version_drift/
-  model.py          versions, forms, rules, toolchains; validation at load time
-  config.py         loading toolchain TOML (built-ins, then the repo's overrides)
-  scan.py           sweeping a repo; the text pass and the structured-field pass
-  cli.py            argument parsing, source resolution, reporting
+  model.py           versions, forms, rules, toolchains; validation at load time
+  config.py          loading toolchain TOML (built-ins, then the repo's overrides)
+  scan.py            sweeping a repo; the text pass and the structured-field pass
+  cli.py             argument parsing, source resolution, reporting
   toolchains/
-    python.toml     .python-version   -> 17 rules
-    node.toml       .nvmrc            -> 10 rules
-    pnpm.toml       packageManager    ->  4 rules
+    python.toml      .python-version          -> 17 rules
+    node.toml        .nvmrc                   -> 10 rules
+    pnpm.toml        packageManager field     ->  4 rules
+    ruff-linter.toml .pre-commit-config.yaml  ->  1 rule (rev of astral-sh/ruff-pre-commit)
+    djlint.toml      .pre-commit-config.yaml  ->  1 rule (rev of Riverside-Healthcare/djLint)
 tests/
-  test_engine.py        toolchain-agnostic engine, incl. a toolchain defined inline
-  test_python_rules.py  the Python rules and the --fix behaviour
-  test_node_rules.py    node, pnpm, and the structured-file machinery
+  conftest.py            shared make_repo/run_cli fixtures; the CLI-contract philosophy, stated inline
+  test_engine.py         toolchain-agnostic engine, incl. a toolchain defined inline
+  test_python_rules.py   the Python rules and the --fix behaviour
+  test_node_rules.py     node, pnpm, and the structured-file machinery
+  test_linter_rules.py   ruff and djlint, and the source_search (multi-line) machinery
 ```
 
 Nothing in `model.py`, `config.py`, `scan.py` or `cli.py` is language-specific.
 A new language is a TOML file, not a release — keep it that way.
 
-## Common commands
+**Don't hand-count a toolchain's rules when documenting it, here or anywhere
+else.** Run `version-drift --list-toolchains`, or count `[[rules]]` blocks in
+its TOML. This file's own layout table went stale exactly that way: two
+toolchains (`ruff-linter.toml`, `djlint.toml`) existed for a release before
+this file ever named them.
 
-```sh
-task init         # pip install -e '.[dev]' + pre-commit install
-task lint         # ruff check + ruff format --check
-task test         # pytest
-task check        # run this repo's own hook against itself
-task try-repo     # drive the packaged hook the way a consumer gets it
-```
+## Traps
+
+- **Don't rename `ruff-linter.toml` to `ruff.toml`.** That filename is ruff's
+  own config name, so ruff would pick it up as configuration for everything in
+  the directory and fail with `unknown field \`components\`` (confirmed in
+  `toolchains/ruff-linter.toml`'s own header comment). The toolchain is still
+  called `ruff` — that name comes from the TOML's `name` key, not the filename.
+
+- **`djlint-pin` and `ruff-pin` have `fixable = false`, permanently, not as an
+  oversight to lift.** Both read a dependency pin, but their source of truth is
+  the hook's `rev:`, which `pre-commit autoupdate` and Renovate move — a
+  disagreement is normally the rev lagging, and `--fix` rewriting the
+  dependency to match would downgrade the linter instead. Both TOMLs cite the
+  same real incident: a dependency read `ruff==0.15.10`/`djlint==1.36.4`
+  against a hook rev of `0.8.6`/`v1.35.4`; `--fix` would have taken either back
+  several minor versions.
+
+- **A new toolchain or rule needs an entry in a given `.*-version-ignore` file
+  only if its own TOML cites a real-looking token of that toolchain's kind —
+  not reflexively in all five.** `toolchains/*` is ignored by all five ignore
+  files today (`.python-version-ignore`, `.node-version-ignore`,
+  `.pnpm-version-ignore`, `.ruff-version-ignore`, `.djlint-version-ignore`)
+  because every built-in toolchain's own definition happens to cite tokens its
+  rules match. A toolchain whose definition cites no token of some other
+  toolchain's shape doesn't need that toolchain's ignore entry — and one that
+  skips the entry it does need will fail the hook on its own definition file.
+
+- **Don't add `README.md` to `.python-version-ignore`.** It's deliberately
+  absent so a Python-version bump keeps the README's own prose honest via
+  `prose-version`/`prose-version-floor` — that's the whole argument for having
+  those two rules. `README.md` *is* listed in `.node-version-ignore` and
+  `.pnpm-version-ignore`, for the opposite reason: this repo has no `.nvmrc` or
+  `packageManager`, so the README's own node/pnpm documentation
+  (`node:22.23.1`, `pnpm@9.15.9`) is the only thing those two toolchains would
+  otherwise find to flag here. That asymmetry is intentional; don't resolve it
+  either direction.
+
+- **The inline escape is matched per line.** A comment on the line above the
+  offending line suppresses nothing — the `<toolchain>-version-ok` comment has
+  to sit on the pin's own line.
+
+- **This repo's own `.github/workflows/clickup.yaml` has no draft/ready
+  branch.** Unlike the org-wide shared workflow, every `pull_request` event
+  here (`opened`, `ready_for_review`, `review_requested`) maps straight to
+  `"in review"` — there is no `"self review"` status for a draft PR. Don't
+  expect this repo's own PRs to move through ClickUp the way a consumer repo's
+  do.
+
+- **Don't bind a test fixture to this repo's own `.python-version`.**
+  `tests/conftest.py`'s `DECLARED` constant is a synthetic version, deliberately
+  not the live pin — every expectation in the suite (`"3.12"`, `"312"`, the
+  `">=3.13"` floor that has to sit above it) is derived from `DECLARED`, so
+  tying it to `.python-version` would red-light most of the suite on the next
+  minor bump instead of being self-contained.
+
+- **`requires-python` is not the version this is developed on.** It is the
+  oldest interpreter a consumer can install it on. Renovate has
+  `requires-python` updates disabled outright (see `renovate.json`) for exactly
+  this reason — raising it breaks consumers who install on an older floor.
+
+- **Don't let `install-floor`'s pinned Python version drift from the
+  `requires-python` floor it exists to guard.** That job's `setup-python` step
+  intentionally sits below `.python-version` and carries its own
+  `python-version-ok` escape — the escape is what let it drift silently once
+  before: `renovate.json` records that an unguarded bump took it from `3.11` to
+  `3.15.1` on the `actions/python-versions` datasource and the floor went
+  untested until someone noticed. `renovate.json` now disables major/minor
+  updates to that datasource specifically to stop it happening again; don't
+  remove that rule to "let Renovate keep things current."
 
 ## Testing this repo
 
@@ -56,38 +125,3 @@ cover what they can't, and both are load-bearing:
 because pre-commit builds the hook venv from whatever interpreter pre-commit
 itself runs on, which in a consumer with no `default_language_version` is
 routinely older than the pin.
-
-## Gotchas
-
-- **`requires-python` is not the version this is developed on.** It is the oldest
-  interpreter a consumer can install it on. Raising it breaks those consumers;
-  Renovate is configured not to touch it.
-- **The repo checks itself**, and `README.md` is deliberately not in
-  `.python-version-ignore` — so the prose rules keep the documentation honest on
-  the next bump. `src/version_drift/toolchains/*` *is* ignored by all three
-  ignore files, because a rule's own definition cites the tokens it matches.
-- **The inline escape is matched per line.** A comment above the offending line
-  suppresses nothing.
-- **Structured fields have no inline escape**, JSON having no comments; the only
-  way out is the ignore file.
-- **`--fix` refuses a pin written beside a content digest**, and refuses it per
-  *match* rather than per rule: the same rule rewrites a bare tag on one line and
-  declines the digest-pinned one below it. `Rule.fixable` is the rule-wide form
-  of the same idea -- right for ruff's and djLint's revs, wrong for this.
-
-## Versioning and release
-
-Conventional commits, and releases are **tags cut by hand**. `version` in
-`pyproject.toml` is the number; the tag is generated from that line (see
-CONTRIBUTING, "Cutting a release") so the two cannot disagree. `autoupdate`
-prefers a tag containing a dot, so consumers land on the release rather than on
-a bare commit SHA.
-
-There is no automation. The shared `spotship/.github` release workflow is in a
-private repo with Actions access scoped to the organization, so this public repo
-cannot call it -- the same constraint that forced `clickup.yaml` to be inlined.
-
-Pick the number by what it does to a consumer's next commit rather than by the
-size of the diff. The hook sweeps the whole repo on every commit, so a new rule
-can fail a repo that passed yesterday even though nothing in that repo changed.
-That is a minor, and the commit message has to say so.
