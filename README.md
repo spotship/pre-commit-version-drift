@@ -13,13 +13,13 @@ This hook makes `.python-version` the single source of truth and fails the
 commit when anything disagrees.
 
 ```
-src/email_summarizer/Dockerfile:1: [docker-image-minor] found '3.9', expected 3.12 (from .python-version = 3.12.13)
+services/worker/Dockerfile:1: [docker-image-minor] found '3.9', expected 3.12 (from .python-version = 3.12.13)
     FROM public.ecr.aws/lambda/python:3.9
 .github/workflows/ci.yaml:25: [setup-python] found '3.14.6', expected 3.12 or 3.12.13 (from .python-version = 3.12.13)
     python-version: '3.14.6'
 ```
 
-Both of those are real: a Lambda three minor versions behind everything around
+Both are the kind of thing it finds: a Lambda three minor versions behind everything around
 it, and a CI job testing on a Python the deployed code never runs.
 
 ## Install
@@ -113,8 +113,7 @@ in `src/version_drift/toolchains/python.toml`, or printed by
 `version-drift --list-toolchains`; this README doesn't keep a second copy of it
 to go stale against.
 
-"config" is `*Dockerfile`, `*.dockerfile`, `*.yml`, `*.yaml`, `*.toml`, `*.cfg`,
-`*.ini`, `*.tf`, `*.hcl`, `*.sh`, `Pipfile`, `.tool-versions`. Only
+Which files count as "config" is that TOML's `config` glob group. Only
 **git-tracked** files are swept, and the whole repo is swept every run — editing
 the source of truth invalidates pins in files that didn't change.
 

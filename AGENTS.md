@@ -2,8 +2,7 @@
 
 What this is and how to install it: README.md. Commands, adding a rule and
 cutting a release: CONTRIBUTING.md. This file holds only what those don't say,
-or what's easy to get wrong anyway. The hook's *packaged* behaviour is the
-product — not just the library behind it.
+or what's easy to get wrong anyway.
 
 ## Layout
 
