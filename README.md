@@ -35,14 +35,14 @@ repos:
       - id: version-drift
 ```
 
-`pre-commit autoupdate --repo https://github.com/spotship/pre-commit-version-drift`
-moves that `rev` to the newest release. Releases are tags, which is what
-`autoupdate` looks for — it prefers a tag containing a dot, and only falls back
-to a bare commit SHA for a repo that has none.
+The hook ids, their stages and what each runs are defined in
+[`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml), and every key you can set on
+them is pre-commit's own [hook schema](https://pre-commit.com/#pre-commit-configyaml---hooks);
+neither is repeated here.
 
-Do not put `rev: main` instead: pre-commit warns that a branch is a mutable
-reference, and because the hook environment is cached per `rev`, you would be
-pinned to whichever commit you first installed — live-looking and frozen.
+Releases are tags, so `pre-commit autoupdate` moves `rev` to the newest one. Don't
+use `rev: main`: the hook environment is cached per `rev`, so you would stay
+pinned to whichever commit you first installed.
 
 Then create the source of truth. A full `X.Y.Z` buys the most, because container
 registries publish patch tags and a repo pinning only `3.12` can't say which
@@ -71,10 +71,8 @@ write it, and they don't agree on a format. All of these are read:
 | `pypy3.10-7.3.12` | pyenv — `3.10` is the language version, `7.3.12` the PyPy release |
 | several lines | `pyenv local 3.12 3.11`; the first wins, as pyenv's own shims do |
 
-`system` and `graalpy-24.1.0` are refused by name. `system` declines to pin at
-all, so there is nothing to check against; `graalpy-24.1.0` carries a GraalVM
-release rather than a language version, and reading its `24` as a major would
-flag every pin in the repo.
+`system` (which pins nothing) and `graalpy-24.1.0` (a GraalVM release, not a
+language version) are refused by name.
 
 **Fewer than three components is allowed.** The patch rules don't stand down —
 they compare on the components the file does supply, so against `3.12` a stale
@@ -86,9 +84,8 @@ nothing in the repo can say the patch is wrong. The run says so:
 a wrong patch cannot be detected from it.
 ```
 
-`--fix` won't rewrite at reduced precision — turning `python:3.9.1` into
-`python:3.12` would delete a component the tag needs — so it reports those
-instead of touching them.
+`--fix` reports those rather than rewrite at reduced precision, which would
+delete a component the tag needs.
 
 ## What it checks: Python
 
@@ -169,7 +166,8 @@ docs/plans/*
       - id: version-drift-fix
 ```
 
-`version-drift-fix` is manual-stage, so it never fires on a normal commit:
+`version-drift-fix` is manual-stage (see `.pre-commit-hooks.yaml`), so it never
+fires on a normal commit:
 
 ```sh
 pre-commit run --hook-stage manual version-drift-fix --all-files
@@ -269,19 +267,13 @@ forth between a commit and a CI run.
 | ruff | `rev:` of `astral-sh/ruff-pre-commit` | `ruff==X.Y.Z` in `*.txt`, `*.toml`, `*.cfg`, `*.ini` |
 | djlint | `rev:` of `Riverside-Healthcare/djLint` | `djlint==X.Y.Z`, same files |
 
-The **rev** is the source because `.pre-commit-config.yaml` sits at the repo root
-everywhere, while the dependency pin's home varies — `requirements/local.txt` in
-one repo, a nested `pyproject.toml` in another. Globs find the pin wherever it
-lives; a fixed path could not.
+The **rev** is the source because `.pre-commit-config.yaml` is always at the
+root, while the dependency pin's home varies. The rev is also the side autoupdate
+and Renovate move, so a disagreement is usually the rev lagging: bump it rather
+than downgrade the dependency. **`--fix` never rewrites these**, for that reason.
 
-That choice is about path stability, not authority, and the rev is the side
-`pre-commit autoupdate` and Renovate move — so a disagreement is usually the rev
-lagging, and the remedy is normally to bump it rather than to downgrade the
-dependency. **`--fix` never rewrites these**, for exactly that reason.
-
-A floating range is reported rather than excused. `ruff>=0.15.6` still resolves
-to whatever is newest at install time, which is the drift itself and not an
-exemption from it.
+A floating range is reported rather than excused: `ruff>=0.15.6` resolves to
+whatever is newest at install time, which is the drift itself.
 
 A repo whose `.pre-commit-config.yaml` lists no ruff hook has no ruff version to
 check anything against, so the toolchain is skipped — the same as a Python repo
@@ -324,23 +316,11 @@ pnpm quiet in the many repos that have a `package.json` only for
 semantic-release. If *no* source is found at all, that is an error rather than a
 silent pass.
 
-Patterns must capture exactly one group: the version. Forms are templates over
-`{major}`, `{minor}`, `{patch}`. Glob groups declared under `[toolchain.X.globs]`
-are referenced as `@name`. `enabled = false` turns off a built-in toolchain.
-
-`components` is how many components the file needs for *every* rule to run at
-full precision, not a precondition for running at all — a shorter file degrades
-as described above. A toolchain whose source holds more than a bare version adds
-a `source_pattern` capturing the dotted run out of it; the default accepts `X`,
-`X.Y`, `X.Y.Z` and a leading `v`. `source_field` points at a version inside a
-structured file, and `skip_globs` excludes files the rules would otherwise sweep
-— node sets it to the lockfiles, while Python deliberately sweeps `uv.lock`.
-
-A rule with `field` set reads that dotted path out of the parsed file and applies
-its `pattern` to the value; without one, the pattern runs over each line.
-
-Bad definitions are rejected at load time, naming the rule — an unknown form, a
-pattern with two groups, a floor on an undotted form.
+Patterns must capture exactly one group: the version. Glob groups are
+referenced as `@name`, and `enabled = false` turns off a built-in toolchain. The
+built-in TOMLs in `src/version_drift/toolchains/` are worked examples of every
+other key (`source_field`, `source_pattern`, `skip_globs`, `field`, floors), and
+a bad definition is rejected at load time with the offending rule named.
 
 ## Known gaps
 
@@ -369,15 +349,10 @@ because a hook that cries wolf gets `--no-verify`'d. It does **not** catch:
 
 ## Development
 
-```sh
-pip install -e '.[dev]'
-pytest
-pre-commit try-repo . version-drift --all-files
-```
-
-Contributing a rule or cutting a release: CONTRIBUTING.md. This is a pre-commit
-hook with no network calls and no credentials read; its threat model and how to
-report a vulnerability are in SECURITY.md.
+Setting up, running the tests, adding a rule and cutting a release:
+[CONTRIBUTING.md](CONTRIBUTING.md). The hook makes no network calls and reads no
+credentials; its threat model and how to report a vulnerability are in
+[SECURITY.md](SECURITY.md).
 
 ## Licence
 
