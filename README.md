@@ -97,7 +97,7 @@ Three forms are derived from `.python-version`:
 | minor | `3.12` | registries publishing only minor tags, interpreter names, runtimes |
 | nodot | `312` | `py312`, `python312` tokens |
 
-17 rules match those forms against Dockerfiles, CI config, `pyproject.toml`,
+Its rules match those forms against Dockerfiles, CI config, `pyproject.toml`,
 `.tool-versions`, `runtime.txt`, `environment.yml`, prose in `*.md`, and more —
 a few examples:
 
@@ -216,7 +216,7 @@ pnpm has no version file at all — there is no `.pnpm-version` convention. Its 
 is the Corepack `packageManager` field, which pnpm also reads natively, so
 getting it wrong changes which package manager runs.
 
-10 node rules and 4 pnpm rules match the same way, against Dockerfiles, Lambda
+The node and pnpm rules match the same way, against Dockerfiles, Lambda
 and Terraform runtimes, CI config, prose, and the structured `package.json`
 fields below — a few examples:
 

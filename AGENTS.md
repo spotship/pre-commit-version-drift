@@ -40,8 +40,8 @@ exit code, stderr text, `file:line` reporting — is what consumers experience;
 asserting on the rule tuples would test something nobody runs.
 
 **The unit tests cannot catch a broken `entry:`.** They import the package
-directly, so they pass with the console script misnamed or missing. Two CI jobs
-cover what they can't, and both are load-bearing:
+directly, so they pass with the console script misnamed or missing. Two steps
+in CI's `hook` job cover what they can't, and both are load-bearing:
 
 - `pre-commit try-repo . version-drift --all-files` — the packaged path.
 - A genuine *separate* consumer repo. `try-repo` runs a `language: python` hook
@@ -62,11 +62,13 @@ pin, or the next minor bump turns most of the suite red.
 
 - **`requires-python` is not the version this is developed on.** It is the oldest
   interpreter a consumer can install it on. Raising it breaks those consumers;
-  Renovate is configured not to touch it.
+  Renovate is configured not to touch it, and `install-floor` fails if it
+  is raised past what that job installs.
 - **`install-floor`'s `setup-python` pin must track that floor**, not
   `.python-version`. It carries a `python-version-ok` escape, so nothing here
-  catches it drifting; `renovate.json` blocks major/minor bumps to it after one
-  took it from 3.11 to 3.15. Don't remove that rule.
+  catches it drifting; `renovate.json` disables major/minor
+  `actions/python-versions` bumps to every `setup-python` input after one took it
+  from 3.11 to 3.15. Don't remove that rule.
 - **The repo checks itself**, and `README.md` is deliberately not in
   `.python-version-ignore` — so the prose rules keep the documentation honest on
   the next bump. It *is* in `.node-version-ignore` and `.pnpm-version-ignore`,
