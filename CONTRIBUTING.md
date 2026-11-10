@@ -55,7 +55,7 @@ The DCO app lets you remediate your own unsigned commits.
 ## Local validation
 
 ```sh
-task init         # pip install -e '.[dev]' + pre-commit install
+task init         # .venv + pip install -e '.[dev]' + pre-commit install
 task lint         # ruff check + ruff format --check
 task test         # pytest
 task check        # run this repo's own hook against itself

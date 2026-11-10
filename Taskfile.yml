@@ -1,16 +1,12 @@
 version: '3'
 
 tasks:
-  bootstrap:
-    desc: "install pre-commit hooks"
-    cmds:
-      - pre-commit install
-
   init:
-    desc: "install the package with dev extras, plus pre-commit hooks"
+    desc: "install the package with dev extras into .venv, plus pre-commit hooks"
     cmds:
-      - pip install -e '.[dev]'
-      - task: bootstrap
+      - python -m venv .venv
+      - .venv/bin/pip install -e '.[dev]'
+      - .venv/bin/pre-commit install
 
   lint:
     desc: "run ruff linter and formatter"
