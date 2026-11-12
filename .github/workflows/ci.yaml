@@ -126,9 +126,6 @@ jobs:
           echo '--- 3. the re-check must pass ---'
           pre-commit run version-drift --all-files
 
-          # Added after the three above so their expectations hold unchanged:
-          # a digest-pinned pin stays red by design, which would fail the
-          # re-check in 3 had it been in the consumer from the start.
           echo '--- 4. --fix must refuse a pin written beside a digest ---'
           pinned="FROM python:$drifted-slim@sha256:$(printf '1%.0s' {1..64})"
           printf '%s\n' "$pinned" > Dockerfile.pinned
