@@ -126,6 +126,26 @@ jobs:
           echo '--- 3. the re-check must pass ---'
           pre-commit run version-drift --all-files
 
+          echo '--- 4. --fix must refuse a pin written beside a digest ---'
+          pinned="FROM python:$drifted-slim@sha256:$(printf '1%.0s' {1..64})"
+          printf '%s\n' "$pinned" > Dockerfile.pinned
+          git add Dockerfile.pinned
+          out="$(pre-commit run --hook-stage manual version-drift-fix --all-files 2>&1)" && rc=0 || rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -eq 0 ]; then
+            echo "::error file=src/version_drift/scan.py::--fix passed over a digest-pinned pin; the tag and the digest would now disagree"
+            exit 1
+          fi
+          if [ "$(cat Dockerfile.pinned)" != "$pinned" ]; then
+            echo "::error file=src/version_drift/scan.py::--fix rewrote a digest-pinned pin, leaving the digest behind"
+            cat Dockerfile.pinned
+            exit 1
+          fi
+          if ! printf '%s' "$out" | grep -qF 'Pinned to a digest'; then
+            echo "::error file=src/version_drift/scan.py::--fix did not say why it left the digest-pinned pin alone"
+            exit 1
+          fi
+
   install-floor:
     # Guards `requires-python` staying below what consumers actually run.
     # pre-commit builds the hook venv from whatever interpreter pre-commit itself
